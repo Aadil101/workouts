@@ -214,6 +214,36 @@ class Modes(unittest.TestCase):
         self.assertEqual(plan.fmt(42.5, "weight"), "42.5")
 
 
+class Ceiling(unittest.TestCase):
+    """Some venues run out of equipment. A ceiling and a plateau look identical
+    in the history, so this is the one thing that has to be declared - and it
+    lives in the data repo, because what your rack holds is nobody's business."""
+
+    def test_a_capped_exercise_stops_climbing(self):
+        hist = ramp("a", D - dt.timedelta(days=3), [(10, 8), (10, 8), (10, 8)])
+        triple, _, _, note = plan.prescribe(hist, "a", cap=10)
+        self.assertEqual(triple, [10, 10, 10])
+        self.assertIn("heaviest", note)
+
+    def test_a_cap_never_splits_past_itself(self):
+        """The split set proposes a heavier last half. At the ceiling there is
+        no heavier half, so proposing one is proposing the impossible."""
+        hist = ramp("a", D - dt.timedelta(days=3), [(10, 8), (10, 8), (10, 8)])
+        _, _, mark, _ = plan.prescribe(hist, "a", cap=10)
+        self.assertNotEqual(mark, "🪜")
+
+    def test_a_cap_still_allows_the_rungs_below_it(self):
+        """A ceiling holds the top back; it must not flatten the whole ladder."""
+        hist = ramp("a", D - dt.timedelta(days=3), [(100, 8), (100, 8), (105, 8)])
+        triple, _, _, _ = plan.prescribe(hist, "a", cap=200)
+        self.assertEqual(triple, [100, 105, 105])
+
+    def test_no_cap_behaves_as_before(self):
+        hist = ramp("a", D - dt.timedelta(days=3), [(100, 8), (100, 8), (105, 8)])
+        self.assertEqual(plan.prescribe(hist, "a")[0],
+                         plan.prescribe(hist, "a", cap=None)[0])
+
+
 class Prescribe(unittest.TestCase):
     def test_clean_session_advances(self):
         hist = ramp("a", D - dt.timedelta(days=2), [(100, 8), (100, 8), (105, 8)])

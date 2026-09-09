@@ -172,8 +172,12 @@ def stalled(hist, ex):
     return len(tops) - 1 - peak
 
 
-def prescribe(hist, ex):
-    """The three values to load or hold, plus a marker and a note."""
+def prescribe(hist, ex, cap=None):
+    """The values to load or hold, plus a marker and a note.
+
+    'cap' is the heaviest this exercise can go at the venue being planned. It
+    only ever holds a prescription back; the ladder is otherwise unaware of it.
+    """
     triple, clean, when, touched = last_triple(hist, ex)
     m = mode(hist, ex)
     if triple is None:
@@ -186,6 +190,11 @@ def prescribe(hist, ex):
         # job is to beat it. Splitting it would mean nothing.
         return [round(triple[-1] + inc, 2)] * typical_sets(hist, ex), m, "", ""
     nxt = advance(triple, inc)
+    if cap is not None and max(nxt) > cap:
+        # The rack has nothing heavier. Say so plainly rather than reporting a
+        # stall, which reads as a failure to try hard enough.
+        held = [min(v, cap) for v in nxt]
+        return held, m, "", "already the heaviest you have here"
     if nxt[-1] > max(triple) and inc / max(triple) > SPLIT and nxt[-1] not in touched:
         # The next rung is a big relative jump - the dumbbell-rack problem. Split
         # the last set rather than stalling on it for another month. Once a split
@@ -266,7 +275,7 @@ def last_gym_kind(sess, table):
 
 def main(today=None):
     today = today or dt.date.today()
-    table, hist = w.load_exercises(), w.load_history()
+    table, hist, limits = w.load_exercises(), w.load_history(), w.load_limits()
     sess = w.sessions(hist)
 
     last_hit, last_done = {}, {}
@@ -309,9 +318,10 @@ def main(today=None):
             pool = home_pool if kind == "home" else gym[cat]
             for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
-                triple, m, mark, note = prescribe(hv, ex)
+                venue = "home" if kind == "home" else "gym"
+                triple, m, mark, note = prescribe(hv, ex, limits.get((ex, venue)))
                 held = stalled(hv, ex)
-                if triple and held >= STALL:
+                if triple and held >= STALL and not note:
                     # Report where it actually sat, not what is being asked for
                     # now - the prescription is the thing that has not landed.
                     top, _, _, _ = last_triple(hv, ex)

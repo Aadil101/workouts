@@ -10,6 +10,24 @@ Set = namedtuple("Set", "date venue exercise set_index weight reps duration")
 Ex = namedtuple("Ex", "category venue primary secondary active")
 
 
+def load_limits(path=None):
+    """(exercise, venue) -> heaviest load available there. Optional; may be empty.
+
+    Lives in the data repo rather than next to exercises.csv for two reasons.
+    It is equipment, so it is nobody else's business what your rack holds, and
+    it is the one thing about a setup that cannot be inferred: a ceiling and a
+    plateau look identical in the history. Columns: exercise,venue,max.
+    """
+    out = {}
+    p = path or os.path.join(DATA, "limits.csv")
+    if not os.path.exists(p):
+        return out
+    with open(p, newline="") as f:
+        for r in csv.DictReader(f):
+            out[(r["exercise"].strip(), r["venue"].strip())] = float(r["max"])
+    return out
+
+
 def load_exercises(path=None):
     """exercise title -> Ex. Anatomy is Hevy's; category/venue are ours."""
     out = {}

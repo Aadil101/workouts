@@ -100,6 +100,13 @@ knowing about; not the path I would choose first.
 example rather than a default. Weight increments are not in it: they are inferred from
 the smallest step your own history has ever moved in, so a cable stack, a pin machine
 and a dumbbell rack each get the right step with nothing to configure. An exercise
+marked `both` runs a separate ladder per venue, so the gym's rack and whatever is in
+your spare room never get confused for each other.
+
+The one thing that cannot be inferred is a ceiling: running out of equipment and
+plateauing look identical in a history. An optional `limits.csv` in the data repo
+(`exercise,venue,max`) holds a prescription back where the weights run out. It lives
+there rather than here because what your rack holds is nobody else's business. An exercise
 marked `both` runs a separate ladder per venue, so the gym's dumbbell rack and whatever
 is in your spare room never get confused for each other. Replace the rows with
 your own exercises, using the exact `exercise_title` strings Hevy writes in its export -
