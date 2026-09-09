@@ -1,0 +1,84 @@
+# workouts
+
+A deterministic weekly session planner built on top of [Hevy](https://www.hevyapp.com/)
+exports. It answers one question Hevy doesn't: **what should I do this session, given
+what I've hit recently?**
+
+Hevy already does analytics well - volume charts, per-exercise progression, personal
+records. What it doesn't do is look at the last two weeks and tell you that your chest
+has been worked three days running while your hamstrings haven't been touched since
+Tuesday. That gap is the whole reason this exists.
+
+No LLM at generation time. Same history in, same plan out.
+
+## The problem it actually solves
+
+Training ad-hoc means picking exercises at the rack based on what you feel like, which
+in practice means picking what you did last time. Over three months of my own logs that
+produced **24 back-to-back sessions sharing a primary muscle** - roughly half of all
+sessions - entirely invisible to me while it was happening. Two of those collisions came
+from bodyweight work at home landing next to machine work at the gym, which feel like
+unrelated activities and are not.
+
+The planner scores every muscle by how recently it was worked, treats home and gym as
+one continuous history, and fills a fixed session shape with whatever is stalest.
+
+## How it works
+
+```
+  Hevy iPhone app
+        |  export CSV
+        v
+   ingest.py ---------> exports/YYYY-MM-DD.csv     (raw dumps, never edited,
+        |                                           named from their own contents)
+        |               exercises.csv              (muscle table: anatomy from Hevy,
+        |                    |                      category + venue are ours)
+        v                    v
+   workouts.py  <-----------+   load, dedupe, weight secondary muscles at 0.5
+        |
+        +--> stale.py    per-muscle staleness, per-exercise state, collision audit
+        |
+        +--> plan.py     one week of sessions -> Markdown
+```
+
+**Exports accumulate rather than replace.** Hevy's free tier caps stats views at three
+months, and its CSV export may follow the same window. Keeping every dated dump means
+the union stays complete even if any single export is truncated.
+
+**The muscle table is the one hand-authored file.** Anatomy columns are copied verbatim
+from what the Hevy app displays, so any row can be verified against the app in seconds
+rather than trusting a mapping someone invented. `category` (push/pull/legs/core),
+`venue` (gym/home/both), and `active` are scheduling metadata that Hevy has no opinion
+on. Setting `active: no` retires an exercise without deleting its history - necessary
+because a retired exercise is by definition the stalest thing in the pool, and would
+otherwise be recommended forever.
+
+**Deviation is self-healing.** There is no state file to update and no way to tell the
+planner you skipped something. Skip a session and those muscles are simply the stalest
+next week, derived from what you actually logged. State files that require manual upkeep
+go stale silently and then quietly corrupt every recommendation downstream.
+
+## Usage
+
+```sh
+python ingest.py ~/Downloads/workout_data.csv   # file an export
+python stale.py                                 # inspect the model
+python plan.py                                  # generate the week
+```
+
+Data lives outside this repo - session timestamps reveal when you're at home versus out.
+Point `WORKOUTS_DATA` at a directory containing `exports/`, or it defaults to
+`../workouts-data`.
+
+## Making it yours
+
+`exercises.csv` is tuned to one gym's machines and one person's habits, including a
+universal 3x8 scheme, so it is an example rather than a default. Replace the rows with
+your own exercises, using the exact `exercise_title` strings Hevy writes in its export -
+that string is the join key, and a mismatch drops the exercise silently instead of
+raising an error.
+
+The session shape (`SHAPE` in `plan.py`) is push/pull alternating with one rotating leg
+machine and one core slot per gym session, plus a short home session. Rotation is only
+as varied as the pool: with fewer distinct primary muscles than session slots, the same
+exercises will recur. That is a property of the equipment list, not a bug.

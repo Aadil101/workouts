@@ -1,0 +1,24 @@
+exercise,category,venue,primary,secondary,active
+Chest Press (Machine),push,gym,chest,"shoulders,triceps",yes
+Chest Fly (Machine),push,gym,chest,,yes
+Seated Dip Machine,push,gym,triceps,"chest,shoulders",yes
+Seated Shoulder Press (Machine),push,gym,shoulders,triceps,yes
+Lateral Raise (Dumbbell),push,both,shoulders,,yes
+Lat Pulldown (Cable),pull,gym,lats,"upper back,biceps,forearms",yes
+Seated Cable Row - V Grip (Cable),pull,gym,upper back,"lats,biceps,forearms",yes
+Seated Cable Row - Bar Wide Grip,pull,gym,upper back,"lats,triceps,biceps,forearms",no
+Bicep Curl (Machine),pull,gym,biceps,,yes
+Reverse Wrist Curl (Dumbbell),pull,gym,forearms,,yes
+Seated Palms Up Wrist Curl,pull,gym,forearms,,yes
+Leg Extension (Machine),legs,gym,quads,,yes
+Seated Leg Curl (Machine),legs,gym,hamstrings,calves,yes
+Leg Press Horizontal (Machine),legs,gym,quads,"hamstrings,glutes",yes
+Cable Crunch,core,gym,abdominals,,yes
+Knee Raise Parallel Bars,core,gym,abdominals,,yes
+Push Up,push,home,chest,"triceps,shoulders",yes
+Kneeling Push Up,push,home,chest,"triceps,shoulders",no
+Squat (Bodyweight),legs,home,quads,"hamstrings,glutes",yes
+Wall Sit,legs,home,quads,abdominals,yes
+Plank,core,home,abdominals,,yes
+Side Plank,core,home,abdominals,,yes
+Bicycle Crunch,core,home,abdominals,,yes
