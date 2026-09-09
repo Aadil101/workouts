@@ -15,25 +15,86 @@ SHAPE = {"push": [("push", 4), ("legs", 1), ("core", 1)],
          "home": [("home", 4)]}
 
 
-def last_weight(hist, ex):
-    """Last top-set weight, whether that day was clean 3x8, and the prior weight."""
+SPLIT = 0.10            # next rung more than this fraction up -> prescribe a split set
+DEFAULT_INC = 5.0       # fallback step when an exercise has only ever seen one weight
+
+# Section anchors. Deliberately few: a marker that appears on every line stops
+# being a marker. A clean session shows no emoji below its heading at all.
+ANCHOR = {"push": "🟧", "pull": "🟦", "home": "🏠"}
+
+
+def fmt(x):
+    """42.5 -> '42.5', 35.0 -> '35'."""
+    return f"{x:g}"
+
+
+def increment(hist, ex):
+    """Smallest upward step this exercise has actually moved in.
+
+    The plate stack, the pin spacing, the gap between dumbbell pairs - all of it
+    is already latent in the history, so no column is needed. Cable stacks come
+    out at 7.5, dumbbells at 2.5, most pin machines at 5. An exercise that has
+    only ever seen one weight has nothing to infer from; light things are
+    usually dumbbells, so guess accordingly.
+    """
+    ws = sorted({s.weight for s in hist if s.exercise == ex and s.weight})
+    gaps = [round(b - a, 2) for a, b in zip(ws, ws[1:])]
+    if gaps:
+        return min(gaps)
+    return 2.5 if ws and ws[0] < 25 else DEFAULT_INC
+
+
+def last_triple(hist, ex):
+    """(weights, clean, date) for the most recent day this was done.
+
+    'clean' means every set that day reached 8 reps. When it didn't, the working
+    weights are the ones that did - a set cut short at 4 reps is an attempt, not
+    a rung - padded back to three so the ladder has something to repeat.
+    """
     days = defaultdict(list)
     for s in hist:
         if s.exercise == ex:
             days[s.date.date()].append(s)
     if not days:
-        return None, False, None, None
+        return None, False, None
     d = max(days)
-    sets = days[d]
-    top = max((s.weight for s in sets if s.weight is not None), default=None)
+    sets = [s for s in days[d] if s.weight is not None]
+    if not sets:
+        return None, False, d
     clean = len(sets) >= 3 and all(s.reps == 8 for s in sets if s.reps is not None)
-    prev = prevd = None
-    for od in sorted(days, reverse=True)[1:]:
-        ow = max((s.weight for s in days[od] if s.weight is not None), default=None)
-        if ow is not None and top is not None and ow != top:
-            prev, prevd = ow, od
-            break
-    return top, clean, prev, prevd
+    good = sorted(s.weight for s in sets if s.reps is None or s.reps >= 8)
+    good = good or sorted(s.weight for s in sets)
+    while len(good) < 3:
+        good.insert(0, good[0])
+    return good[-3:], clean, d
+
+
+def advance(triple, inc):
+    """One rung up the ladder: drop the first set, append at the top.
+
+    Read off his own history rather than invented - (a a a) -> (a a b) ->
+    (a b b) -> (b b c). Appending the max when the tail already straddles two
+    weights is what makes the middle rung a half-step instead of a jump.
+    """
+    tail = list(triple[1:])
+    top = max(tail)
+    return tail + [top if tail[0] != tail[-1] else round(top + inc, 2)]
+
+
+def prescribe(hist, ex):
+    """The three weights to load, plus a marker and a note. None if never done."""
+    triple, clean, when = last_triple(hist, ex)
+    if triple is None:
+        return None, "🆕", "first time - pick something light and log it"
+    inc = increment(hist, ex)
+    if not clean:
+        return triple, "⚠️", f"repeat - missed reps on {when}"
+    nxt = advance(triple, inc)
+    if nxt[-1] > max(triple) and inc / max(triple) > SPLIT:
+        # The next rung is a big relative jump - the dumbbell-rack problem. Split
+        # the last set rather than stalling on it for another month.
+        return triple, "🪜", f"last set splits: {fmt(triple[-1])}x4 + {fmt(nxt[-1])}x4"
+    return nxt, "", ""
 
 
 def compound_first(chosen, table):
@@ -108,37 +169,34 @@ def main(today=None):
            for c in ("push", "pull", "legs", "core")}
     home_pool = [e for e, x in table.items() if x.active and x.venue in ("home", "both")]
 
-    order = [("Gym 1", nxt), ("Gym 2", "pull" if nxt == "push" else "push"),
-             ("Home", "home"), ("Gym 3", nxt),
-             ("Gym 4 (optional)", "pull" if nxt == "push" else "push")]
+    opp = "pull" if nxt == "push" else "push"
+    order = [("Gym 1", nxt, ""), ("Gym 2", opp, ""), ("Home", "home", ""),
+             ("Gym 3", nxt, ""), ("Gym 4", opp, " (optional)")]
 
-    out = [f"# Week of {today}", "",
-           f"Last gym session was **{prev}**, so the cycle continues with **{nxt}**.",
-           "Sessions are ordered, not dated - do them whenever the week allows.",
-           "Everything is 3x8; only the weight moves.", ""]
+    out = [f"# 🗓️ Week of {today:%b %-d}" if os.name != "nt"
+           else f"# 🗓️ Week of {today:%b %#d}", "",
+           f"Coming off **{prev}**, so the cycle opens with **{nxt}**.",
+           "Sessions are ordered, not dated.", ""]
 
-    for i, (label, kind) in enumerate(order):
+    for i, (label, kind, tail) in enumerate(order):
         on = today + dt.timedelta(days=1 + GAP * i)
-        out += [f"## {label} - {kind}", ""]
+        anchor = "⭐" if tail else ANCHOR[kind]
+        head = label if kind == "home" else f"{label} - {kind.capitalize()}"
+        out += [f"## {anchor} {head}{tail}", ""]
         before = dict(last_hit)
         for cat, n in SHAPE[kind]:
             pool = home_pool if kind == "home" else gym[cat]
             for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
-                top, clean, prevw, prevd = last_weight(hist, ex)
-                if top:
-                    note = f"3x8 @ {top:.0f}" + (" (clean last time)" if clean else " (missed reps last time)")
-                    if prevw:
-                        note += f" - was {prevw:.0f} on {prevd}"
-                else:
-                    note = "3 sets" + ("" if last_done.get(ex) else " - first time, pick light and log it")
+                triple, mark, note = prescribe(hist, ex)
                 ago = (on - before[x.primary]).days if x.primary in before else 99
-                warn = f"  **{x.primary} only {ago}d rest**" if ago < FRESH_DAYS else ""
-                out.append(f"- **{ex}** - {note}{warn}")
+                if ago < FRESH_DAYS and not mark:
+                    mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"
+                line = " · ".join(fmt(t) for t in triple) if triple else ""
+                out += [f"**{ex}**", " ".join(p for p in (line, mark, note) if p).strip(), ""]
                 last_done[ex] = on
                 for m in [x.primary] + x.secondary:
                     last_hit[m] = on
-        out.append("")
 
     text = "\n".join(out)
     plans = os.path.join(w.DATA, "plans")
@@ -152,6 +210,12 @@ def main(today=None):
                 f.write(text)
         except OSError as e:
             print(f"! could not write {path}: {e}", file=sys.stderr)
+    # The files are always utf-8; only the console might not be (Windows
+    # defaults to cp1252, which cannot encode the section anchors).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
     print(text)
     print("written to " + ", ".join(written))
 

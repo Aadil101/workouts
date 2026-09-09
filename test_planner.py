@@ -79,40 +79,86 @@ class Ordering(unittest.TestCase):
         self.assertCountEqual(got, ["wristcurl", "pulldown", "press"])
 
 
-class LastWeight(unittest.TestCase):
-    def test_reports_top_set_and_clean_when_all_eights(self):
-        hist = sets("a", D - dt.timedelta(days=2), [8, 8, 8], weight=60.0)
-        top, clean, prev, _ = plan.last_weight(hist, "a")
-        self.assertEqual((top, clean, prev), (60.0, True, None))
+def ramp(exercise, day, pairs):
+    """A session of (weight, reps) pairs - the ascending ladders he actually does."""
+    return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), "My Workout",
+                exercise, i, wt, r) for i, (wt, r) in enumerate(pairs)]
 
-    def test_split_set_is_not_clean(self):
-        """8/4+4 is a deliberate way to ease into a heavier weight. It must not
-        read as a completed 3x8, or the trend line lies about readiness."""
-        hist = sets("a", D - dt.timedelta(days=2), [8, 4, 4])
-        _, clean, _, _ = plan.last_weight(hist, "a")
-        self.assertFalse(clean)
 
-    def test_fewer_than_three_sets_is_not_clean(self):
-        hist = sets("a", D - dt.timedelta(days=2), [8, 8])
-        _, clean, _, _ = plan.last_weight(hist, "a")
-        self.assertFalse(clean)
+class Ladder(unittest.TestCase):
+    """The rung rule, read off his own history: (a a a) -> (a a b) -> (a b b) -> (b b c)."""
 
-    def test_finds_the_previous_different_weight(self):
-        hist = (sets("a", D - dt.timedelta(days=20), [8, 8, 8], weight=50.0)
-                + sets("a", D - dt.timedelta(days=9), [8, 8, 8], weight=50.0)
-                + sets("a", D - dt.timedelta(days=2), [8, 8, 8], weight=60.0))
-        top, _, prev, prevd = plan.last_weight(hist, "a")
-        self.assertEqual((top, prev), (60.0, 50.0))
-        self.assertEqual(prevd, D - dt.timedelta(days=9))
+    def test_flat_triple_grows_a_top_rung(self):
+        self.assertEqual(plan.advance([100, 100, 100], 5), [100, 100, 105])
 
-    def test_uses_the_heaviest_set_of_the_last_day(self):
-        day = D - dt.timedelta(days=2)
-        hist = sets("a", day, [8], weight=55.0) + sets("a", day, [8, 8], weight=60.0)
-        top, _, _, _ = plan.last_weight(hist, "a")
-        self.assertEqual(top, 60.0)
+    def test_middle_rung_fills_before_the_top_moves(self):
+        """The half-step is the whole point of double progression. Skipping it
+        turns every session into a jump and is how you stall."""
+        self.assertEqual(plan.advance([100, 100, 105], 5), [100, 105, 105])
 
-    def test_unknown_exercise_yields_nothing(self):
-        self.assertEqual(plan.last_weight([], "nope"), (None, False, None, None))
+    def test_full_triple_moves_the_whole_ladder_up(self):
+        self.assertEqual(plan.advance([100, 105, 105], 5), [105, 105, 110])
+
+    def test_reproduces_the_seated_dip_progression(self):
+        """Four real sessions from Aug 27 to Sep 8. If the rule is right it
+        predicts each from the one before with no special cases."""
+        t = [95, 100, 100]
+        for expected in ([100, 100, 105], [100, 105, 105], [105, 105, 110]):
+            t = plan.advance(t, 5)
+            self.assertEqual(t, expected)
+
+
+class Increment(unittest.TestCase):
+    def test_infers_the_stack_from_weights_used(self):
+        """Cable stacks move in 7.5, dumbbells in 2.5. Both are already in the
+        history, so an increment column would be a second source of truth."""
+        hist = (ramp("a", D - dt.timedelta(days=9), [(27.5, 8), (35, 8), (35, 8)])
+                + ramp("a", D - dt.timedelta(days=2), [(35, 8), (35, 8), (42.5, 8)]))
+        self.assertEqual(plan.increment(hist, "a"), 7.5)
+
+    def test_ignores_larger_jumps(self):
+        """A one-off 20lb leap must not become the assumed step size."""
+        hist = ramp("a", D, [(30, 8), (35, 8), (55, 8)])
+        self.assertEqual(plan.increment(hist, "a"), 5)
+
+    def test_single_weight_guesses_by_load(self):
+        self.assertEqual(plan.increment(ramp("a", D, [(10, 8)]), "a"), 2.5)
+        self.assertEqual(plan.increment(ramp("a", D, [(90, 8)]), "a"), plan.DEFAULT_INC)
+
+
+class Prescribe(unittest.TestCase):
+    def test_clean_session_advances(self):
+        hist = ramp("a", D - dt.timedelta(days=2), [(100, 8), (100, 8), (105, 8)])
+        triple, mark, _ = plan.prescribe(hist, "a")
+        self.assertEqual(triple, [100, 105, 105])
+        self.assertEqual(mark, "")
+
+    def test_missed_reps_repeat_the_working_weights(self):
+        """35/35/35x4 + 42.5x4 is an attempt at the next rung, not a completed
+        rung. Advancing off it prescribes a weight he could not finish."""
+        hist = ramp("a", D - dt.timedelta(days=2),
+                    [(35, 8), (35, 8), (35, 4), (42.5, 4)])
+        triple, mark, note = plan.prescribe(hist, "a")
+        self.assertEqual(triple, [35, 35, 35])
+        self.assertIn("repeat", note)
+
+    def test_big_relative_jump_becomes_a_split_set(self):
+        """Dumbbells jump 2.5 off a 12.5 base - 20%. Prescribing it whole is how
+        an exercise sits at one weight for eleven sessions."""
+        hist = ramp("a", D - dt.timedelta(days=2), [(12.5, 8), (12.5, 8), (12.5, 8)])
+        triple, mark, note = plan.prescribe(hist, "a")
+        self.assertEqual(triple, [12.5, 12.5, 12.5])
+        self.assertIn("15x4", note)
+
+    def test_small_relative_jump_does_not_split(self):
+        hist = ramp("a", D - dt.timedelta(days=2), [(105, 8), (110, 8), (110, 8)])
+        _, mark, note = plan.prescribe(hist, "a")
+        self.assertEqual((mark, note), ("", ""))
+
+    def test_never_done_has_no_weights(self):
+        triple, _, note = plan.prescribe([], "nope")
+        self.assertIsNone(triple)
+        self.assertIn("first time", note)
 
 
 class Carryover(unittest.TestCase):
