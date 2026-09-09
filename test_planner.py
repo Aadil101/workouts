@@ -19,7 +19,19 @@ def ex(primary, category="push", venue="gym", secondary=(), active=True):
 def sets(exercise, day, reps, weight=60.0, venue="My Workout"):
     """One session's worth of sets for a single exercise."""
     return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), venue,
-                exercise, i, weight, r) for i, r in enumerate(reps)]
+                exercise, i, weight, r, None) for i, r in enumerate(reps)]
+
+
+def held(exercise, day, seconds):
+    """A timed session - a plank logs seconds and no weight at all."""
+    return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), "My Home Workout",
+                exercise, i, None, 0, sec) for i, sec in enumerate(seconds)]
+
+
+def bodyweight(exercise, day, reps):
+    """A bodyweight session - reps, no weight, no duration."""
+    return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), "My Home Workout",
+                exercise, i, None, r, 0) for i, r in enumerate(reps)]
 
 
 class Pick(unittest.TestCase):
@@ -82,7 +94,7 @@ class Ordering(unittest.TestCase):
 def ramp(exercise, day, pairs):
     """A session of (weight, reps) pairs - the ascending ladders he actually does."""
     return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), "My Workout",
-                exercise, i, wt, r) for i, (wt, r) in enumerate(pairs)]
+                exercise, i, wt, r, None) for i, (wt, r) in enumerate(pairs)]
 
 
 class Ladder(unittest.TestCase):
@@ -151,10 +163,61 @@ class Stall(unittest.TestCase):
         self.assertEqual(plan.stalled(self.days(45, 45, 40, 45), "a"), 3)
 
 
+class Modes(unittest.TestCase):
+    """Not everything progresses by weight. Reading the mode off the export is
+    what stopped six bodyweight exercises reporting 'first time' forever - a
+    plank logs seconds and no weight, so a weight-keyed lookup found nothing."""
+
+    def test_a_hold_is_timed(self):
+        self.assertEqual(plan.mode(held("a", D, [60, 60, 60]), "a"), "time")
+
+    def test_a_bodyweight_set_is_reps(self):
+        self.assertEqual(plan.mode(bodyweight("a", D, [8, 8, 8]), "a"), "reps")
+
+    def test_loaded_work_is_weight(self):
+        self.assertEqual(plan.mode(ramp("a", D, [(60, 8)]), "a"), "weight")
+
+    def test_a_hold_gets_longer(self):
+        hist = held("a", D - dt.timedelta(days=3), [60, 65, 65])
+        triple, m, _, _ = plan.prescribe(hist, "a")
+        self.assertEqual((triple, m), ([70, 70, 70], "time"))
+
+    def test_a_bodyweight_set_gets_a_rep(self):
+        hist = bodyweight("a", D - dt.timedelta(days=3), [8, 8, 8])
+        triple, m, _, _ = plan.prescribe(hist, "a")
+        self.assertEqual((triple, m), ([9, 9, 9], "reps"))
+
+    def test_set_count_follows_the_last_session(self):
+        """A wall sit is one set, a side plank two, a bicycle crunch five.
+        Assuming three invented work for some and cut it from others."""
+        self.assertEqual(len(plan.prescribe(held("a", D, [60]), "a")[0]), 1)
+        self.assertEqual(len(plan.prescribe(held("b", D, [60, 62]), "b")[0]), 2)
+
+    def test_set_count_is_recency_not_frequency(self):
+        """Push ups went one set, then two, then three as they got easier. The
+        commonest count is a record of how he started, not where he is."""
+        hist = (bodyweight("a", D - dt.timedelta(days=30), [8])
+                + bodyweight("a", D - dt.timedelta(days=20), [8])
+                + bodyweight("a", D - dt.timedelta(days=10), [8, 8])
+                + bodyweight("a", D - dt.timedelta(days=3), [8, 8, 8]))
+        self.assertEqual(plan.typical_sets(hist, "a"), 3)
+
+    def test_a_hold_never_splits(self):
+        """The split set is a weight-stack trick. 5s on a 60s hold is over the
+        10% line, but half a plank at a heavier plank means nothing."""
+        hist = held("a", D - dt.timedelta(days=3), [30, 30, 30])
+        _, _, mark, note = plan.prescribe(hist, "a")
+        self.assertEqual((mark, note), ("", ""))
+
+    def test_seconds_render_with_a_unit(self):
+        self.assertEqual(plan.fmt(65, "time"), "65s")
+        self.assertEqual(plan.fmt(42.5, "weight"), "42.5")
+
+
 class Prescribe(unittest.TestCase):
     def test_clean_session_advances(self):
         hist = ramp("a", D - dt.timedelta(days=2), [(100, 8), (100, 8), (105, 8)])
-        triple, mark, _ = plan.prescribe(hist, "a")
+        triple, _m, mark, _ = plan.prescribe(hist, "a")
         self.assertEqual(triple, [100, 105, 105])
         self.assertEqual(mark, "")
 
@@ -164,7 +227,7 @@ class Prescribe(unittest.TestCase):
         re-prescribed the same split, so the rung could never be climbed."""
         hist = ramp("a", D - dt.timedelta(days=2),
                     [(35, 8), (35, 8), (35, 4), (42.5, 4)])
-        triple, mark, note = plan.prescribe(hist, "a")
+        triple, _m, mark, note = plan.prescribe(hist, "a")
         self.assertEqual(triple, [35, 35, 42.5])
         self.assertEqual((mark, note), ("", ""))
 
@@ -172,13 +235,13 @@ class Prescribe(unittest.TestCase):
         """Half the split is not the split. 4 + 2 does not make a set."""
         hist = ramp("a", D - dt.timedelta(days=2),
                     [(35, 8), (35, 8), (35, 4), (42.5, 2)])
-        triple, _, note = plan.prescribe(hist, "a")
+        triple, _m, _, note = plan.prescribe(hist, "a")
         self.assertEqual(triple, [35, 35, 35])
         self.assertIn("repeat", note)
 
     def test_missed_reps_repeat_the_working_weights(self):
         hist = ramp("a", D - dt.timedelta(days=2), [(35, 8), (35, 8), (35, 5)])
-        triple, _, note = plan.prescribe(hist, "a")
+        triple, _m, _, note = plan.prescribe(hist, "a")
         self.assertEqual(triple, [35, 35, 35])
         self.assertIn("repeat", note)
 
@@ -186,17 +249,17 @@ class Prescribe(unittest.TestCase):
         """Dumbbells jump 2.5 off a 12.5 base - 20%. Prescribing it whole is how
         an exercise sits at one weight for eleven sessions."""
         hist = ramp("a", D - dt.timedelta(days=2), [(12.5, 8), (12.5, 8), (12.5, 8)])
-        triple, mark, note = plan.prescribe(hist, "a")
+        triple, _m, mark, note = plan.prescribe(hist, "a")
         self.assertEqual(triple, [12.5, 12.5, 12.5])
         self.assertIn("15x4", note)
 
     def test_small_relative_jump_does_not_split(self):
         hist = ramp("a", D - dt.timedelta(days=2), [(105, 8), (110, 8), (110, 8)])
-        _, mark, note = plan.prescribe(hist, "a")
+        _, _m, mark, note = plan.prescribe(hist, "a")
         self.assertEqual((mark, note), ("", ""))
 
     def test_never_done_has_no_weights(self):
-        triple, _, note = plan.prescribe([], "nope")
+        triple, _m, _, note = plan.prescribe([], "nope")
         self.assertIsNone(triple)
         self.assertIn("first time", note)
 

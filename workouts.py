@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # Exports and plans live outside this repo: they carry timestamped session data.
 SYNC = os.environ.get("WORKOUTS_SYNC")
 DATA = os.path.normpath(os.environ.get("WORKOUTS_DATA") or os.path.join(ROOT, os.pardir, "workouts-data"))
-Set = namedtuple("Set", "date venue exercise set_index weight reps")
+Set = namedtuple("Set", "date venue exercise set_index weight reps duration")
 Ex = namedtuple("Ex", "category venue primary secondary active")
 
 
@@ -39,6 +39,10 @@ def load_history(exports_dir=None):
                     int(r["set_index"]),
                     float(r["weight_lbs"]) if r["weight_lbs"] else None,
                     int(r["reps"]) if r["reps"] else None,
+                    # Bodyweight holds live here: a plank logs seconds and no
+                    # weight at all, so dropping this column made every timed
+                    # exercise look like it had never been done.
+                    int(r["duration_seconds"]) if r.get("duration_seconds") else None,
                 ))
     return sorted(sets, key=lambda s: (s.date, s.exercise, s.set_index))
 

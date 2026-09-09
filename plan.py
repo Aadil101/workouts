@@ -18,19 +18,61 @@ SHAPE = {"push": [("push", 4), ("legs", 1), ("core", 1)],
 STALL = 4               # sessions at an unchanged top weight before it is worth saying
 SPLIT = 0.10            # next rung more than this fraction up -> prescribe a split set
 DEFAULT_INC = 5.0       # fallback step when an exercise has only ever seen one weight
+TIME_INC = 5            # seconds to add to a hold that was completed
+REP_INC = 1             # reps to add to a bodyweight set that was completed
 
 # Section anchors. Deliberately few: a marker that appears on every line stops
 # being a marker. A clean session shows no emoji below its heading at all.
 ANCHOR = {"push": "🟧", "pull": "🟦", "home": "🏠"}
 
 
-def fmt(x):
-    """42.5 -> '42.5', 35.0 -> '35'."""
-    return f"{x:g}"
+def mode(hist, ex):
+    """How this exercise progresses: by weight, by time under tension, or by reps.
+
+    Read off the export rather than declared in the table. Hevy already
+    distinguishes them - a plank logs seconds and no weight, a push up logs reps
+    and no weight - so a column would only be a second place for it to be wrong.
+    """
+    sets = [s for s in hist if s.exercise == ex]
+    if any(s.weight for s in sets):
+        return "weight"
+    if any(s.duration for s in sets):
+        return "time"
+    return "reps"
+
+
+def typical_sets(hist, ex, default=3):
+    """How many sets of this he did last time.
+
+    The gym runs on three sets, but home does not - a wall sit is one, a side
+    plank two, a bicycle crunch five. Prescribing three everywhere invented work
+    for some exercises and quietly cut it from others.
+
+    Deliberately the last session and not the most common one: the counts climb
+    as an exercise gets easier - push ups went one, two, three - so the commonest
+    value is a record of how he started rather than where he is.
+    """
+    per_day = defaultdict(int)
+    for s in hist:
+        if s.exercise == ex and value(s, mode(hist, ex)):
+            per_day[s.date.date()] += 1
+    return per_day[max(per_day)] if per_day else default
+
+
+def value(s, m):
+    return s.weight if m == "weight" else s.duration if m == "time" else s.reps
+
+
+def fmt(x, m="weight"):
+    """42.5 -> '42.5', 35.0 -> '35', a hold -> '65s'."""
+    return f"{x:g}s" if m == "time" else f"{x:g}"
 
 
 def increment(hist, ex):
     """Smallest upward step this exercise has actually moved in.
+
+    Only meaningful for weighted work. A hold and a bodyweight set have no
+    hardware imposing a step, so they get a flat one.
 
     The plate stack, the pin spacing, the gap between dumbbell pairs - all of it
     is already latent in the history, so no column is needed. Cable stacks come
@@ -38,6 +80,11 @@ def increment(hist, ex):
     only ever seen one weight has nothing to infer from; light things are
     usually dumbbells, so guess accordingly.
     """
+    m = mode(hist, ex)
+    if m == "time":
+        return TIME_INC
+    if m == "reps":
+        return REP_INC
     ws = sorted({s.weight for s in hist if s.exercise == ex and s.weight})
     gaps = [round(b - a, 2) for a, b in zip(ws, ws[1:])]
     if gaps:
@@ -46,15 +93,19 @@ def increment(hist, ex):
 
 
 def last_triple(hist, ex):
-    """(weights, clean, date) for the most recent day this was done.
+    """(values, clean, date, touched) for the most recent day this was done.
 
-    'clean' means the day's work was completed. Usually that is every set at 8
-    reps, but a prescribed split (4 at the old weight, 4 at the new) is also a
-    completed set - the short sets add up to 8. Requiring 8 everywhere made a
-    perfectly executed split read as a failure, which repeated the same triple
-    and re-prescribed the same split forever.
+    Values are in whatever unit the exercise progresses in - pounds, seconds or
+    reps. 'clean' means the day's work was completed. For weighted work that is
+    usually every set at 8 reps, but a prescribed split (4 at the old weight, 4
+    at the new) also completes a set - the short sets add up to 8. Requiring 8
+    everywhere made a perfectly executed split read as a failure, which repeated
+    the same triple and re-prescribed the same split forever.
 
-    The working weights are the ones that carried a full set; a half set is an
+    A hold or a bodyweight set has no rep target to miss, so finishing three
+    sets is the whole of it.
+
+    The working values are the ones that carried a full set; a half set is an
     attempt at the next rung, not a rung. They pad back to three so a repeat has
     something to repeat.
     """
@@ -65,16 +116,22 @@ def last_triple(hist, ex):
     if not days:
         return None, False, None, set()
     d = max(days)
-    sets = [s for s in days[d] if s.weight is not None]
+    m = mode(hist, ex)
+    sets = [s for s in days[d] if value(s, m)]
     if not sets:
         return None, False, d, set()
+    vals = sorted(value(s, m) for s in sets)
+    if m != "weight":
+        # A hold has no failure state - you hold until you cannot, and that
+        # number is the result. Same for a bodyweight set taken to its limit.
+        return [vals[-1]], True, d, set(vals)
     short = [s.reps for s in sets if s.reps is not None and s.reps < 8]
     clean = len(sets) >= 3 and (not short or sum(short) >= 8)
     good = sorted(s.weight for s in sets if s.reps is None or s.reps >= 8)
-    good = good or sorted(s.weight for s in sets)
+    good = good or vals
     while len(good) < 3:
         good.insert(0, good[0])
-    return good[-3:], clean, d, {s.weight for s in sets}
+    return good[-3:], clean, d, set(vals)
 
 
 def advance(triple, inc):
@@ -100,8 +157,8 @@ def stalled(hist, ex):
     """
     days = defaultdict(list)
     for s in hist:
-        if s.exercise == ex and s.weight is not None:
-            days[s.date.date()].append(s.weight)
+        if s.exercise == ex and value(s, mode(hist, ex)) is not None:
+            days[s.date.date()].append(value(s, mode(hist, ex)))
     tops = [max(days[d]) for d in sorted(days)]
     if not tops:
         return 0
@@ -116,21 +173,26 @@ def stalled(hist, ex):
 
 
 def prescribe(hist, ex):
-    """The three weights to load, plus a marker and a note. None if never done."""
+    """The three values to load or hold, plus a marker and a note."""
     triple, clean, when, touched = last_triple(hist, ex)
+    m = mode(hist, ex)
     if triple is None:
-        return None, "🆕", "first time - pick something light and log it"
+        return None, m, "🆕", "first time - start easy and log it"
     inc = increment(hist, ex)
     if not clean:
-        return triple, "⚠️", f"repeat - missed reps on {when}"
+        return triple, m, "⚠️", f"repeat - did not finish on {when}"
+    if m != "weight":
+        # A hold or a bodyweight set has no ladder: there is one number, and the
+        # job is to beat it. Splitting it would mean nothing.
+        return [round(triple[-1] + inc, 2)] * typical_sets(hist, ex), m, "", ""
     nxt = advance(triple, inc)
     if nxt[-1] > max(triple) and inc / max(triple) > SPLIT and nxt[-1] not in touched:
         # The next rung is a big relative jump - the dumbbell-rack problem. Split
         # the last set rather than stalling on it for another month. Once a split
         # has actually been completed at that weight it is earned, so take it
         # whole next time instead of splitting the same rung again.
-        return triple, "🪜", f"last set splits: {fmt(triple[-1])}x4 + {fmt(nxt[-1])}x4"
-    return nxt, "", ""
+        return triple, m, "🪜", f"last set splits: {fmt(triple[-1])}x4 + {fmt(nxt[-1])}x4"
+    return nxt, m, "", ""
 
 
 def compound_first(chosen, table):
@@ -224,14 +286,19 @@ def main(today=None):
             pool = home_pool if kind == "home" else gym[cat]
             for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
-                triple, mark, note = prescribe(hist, ex)
+                triple, m, mark, note = prescribe(hist, ex)
                 held = stalled(hist, ex)
                 if triple and held >= STALL:
-                    note = (note + " - " if note else "") + f"top set has held at {fmt(max(triple))} for {held} sessions"
+                    # Report where it actually sat, not what is being asked for
+                    # now - the prescription is the thing that has not landed.
+                    top, _, _, _ = last_triple(hist, ex)
+                    note = (note + " - " if note else "- ") + f"stuck at {fmt(max(top), m)} for {held} sessions"
                 ago = (on - before[x.primary]).days if x.primary in before else 99
                 if ago < FRESH_DAYS and not mark:
                     mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"
-                line = " · ".join(fmt(t) for t in triple) if triple else ""
+                line = " · ".join(fmt(t, m) for t in triple) if triple else ""
+                if triple and m == "reps":
+                    line += " reps"
                 out += [f"**{ex}**", " ".join(p for p in (line, mark, note) if p).strip(), ""]
                 last_done[ex] = on
                 for m in [x.primary] + x.secondary:
