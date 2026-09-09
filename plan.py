@@ -47,26 +47,33 @@ def increment(hist, ex):
 def last_triple(hist, ex):
     """(weights, clean, date) for the most recent day this was done.
 
-    'clean' means every set that day reached 8 reps. When it didn't, the working
-    weights are the ones that did - a set cut short at 4 reps is an attempt, not
-    a rung - padded back to three so the ladder has something to repeat.
+    'clean' means the day's work was completed. Usually that is every set at 8
+    reps, but a prescribed split (4 at the old weight, 4 at the new) is also a
+    completed set - the short sets add up to 8. Requiring 8 everywhere made a
+    perfectly executed split read as a failure, which repeated the same triple
+    and re-prescribed the same split forever.
+
+    The working weights are the ones that carried a full set; a half set is an
+    attempt at the next rung, not a rung. They pad back to three so a repeat has
+    something to repeat.
     """
     days = defaultdict(list)
     for s in hist:
         if s.exercise == ex:
             days[s.date.date()].append(s)
     if not days:
-        return None, False, None
+        return None, False, None, set()
     d = max(days)
     sets = [s for s in days[d] if s.weight is not None]
     if not sets:
-        return None, False, d
-    clean = len(sets) >= 3 and all(s.reps == 8 for s in sets if s.reps is not None)
+        return None, False, d, set()
+    short = [s.reps for s in sets if s.reps is not None and s.reps < 8]
+    clean = len(sets) >= 3 and (not short or sum(short) >= 8)
     good = sorted(s.weight for s in sets if s.reps is None or s.reps >= 8)
     good = good or sorted(s.weight for s in sets)
     while len(good) < 3:
         good.insert(0, good[0])
-    return good[-3:], clean, d
+    return good[-3:], clean, d, {s.weight for s in sets}
 
 
 def advance(triple, inc):
@@ -83,16 +90,18 @@ def advance(triple, inc):
 
 def prescribe(hist, ex):
     """The three weights to load, plus a marker and a note. None if never done."""
-    triple, clean, when = last_triple(hist, ex)
+    triple, clean, when, touched = last_triple(hist, ex)
     if triple is None:
         return None, "🆕", "first time - pick something light and log it"
     inc = increment(hist, ex)
     if not clean:
         return triple, "⚠️", f"repeat - missed reps on {when}"
     nxt = advance(triple, inc)
-    if nxt[-1] > max(triple) and inc / max(triple) > SPLIT:
+    if nxt[-1] > max(triple) and inc / max(triple) > SPLIT and nxt[-1] not in touched:
         # The next rung is a big relative jump - the dumbbell-rack problem. Split
-        # the last set rather than stalling on it for another month.
+        # the last set rather than stalling on it for another month. Once a split
+        # has actually been completed at that weight it is earned, so take it
+        # whole next time instead of splitting the same rung again.
         return triple, "🪜", f"last set splits: {fmt(triple[-1])}x4 + {fmt(nxt[-1])}x4"
     return nxt, "", ""
 

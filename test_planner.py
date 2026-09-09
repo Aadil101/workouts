@@ -133,12 +133,27 @@ class Prescribe(unittest.TestCase):
         self.assertEqual(triple, [100, 105, 105])
         self.assertEqual(mark, "")
 
-    def test_missed_reps_repeat_the_working_weights(self):
-        """35/35/35x4 + 42.5x4 is an attempt at the next rung, not a completed
-        rung. Advancing off it prescribes a weight he could not finish."""
+    def test_a_completed_split_counts_as_done(self):
+        """The real Sep 6 lat pulldown: 35/35/35x4 + 42.5x4, which is the split
+        the tool itself prescribes. Reading it as a miss repeated the triple and
+        re-prescribed the same split, so the rung could never be climbed."""
         hist = ramp("a", D - dt.timedelta(days=2),
                     [(35, 8), (35, 8), (35, 4), (42.5, 4)])
         triple, mark, note = plan.prescribe(hist, "a")
+        self.assertEqual(triple, [35, 35, 42.5])
+        self.assertEqual((mark, note), ("", ""))
+
+    def test_a_bailed_split_is_a_miss(self):
+        """Half the split is not the split. 4 + 2 does not make a set."""
+        hist = ramp("a", D - dt.timedelta(days=2),
+                    [(35, 8), (35, 8), (35, 4), (42.5, 2)])
+        triple, _, note = plan.prescribe(hist, "a")
+        self.assertEqual(triple, [35, 35, 35])
+        self.assertIn("repeat", note)
+
+    def test_missed_reps_repeat_the_working_weights(self):
+        hist = ramp("a", D - dt.timedelta(days=2), [(35, 8), (35, 8), (35, 5)])
+        triple, _, note = plan.prescribe(hist, "a")
         self.assertEqual(triple, [35, 35, 35])
         self.assertIn("repeat", note)
 
