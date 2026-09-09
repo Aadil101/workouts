@@ -227,6 +227,25 @@ def pick(pool, n, on, last_hit, last_done, table):
     return chosen
 
 
+def by_venue(sess, table):
+    """Split history into what was done at home and what was done at the gym.
+
+    An exercise you own at both places is not one exercise for progression
+    purposes: the gym has a full dumbbell rack and home has whatever is in the
+    corner, so the same movement runs two independent ladders. Merging them
+    prescribes gym weights for a home session.
+
+    The venue comes from what a session contains, not from its Hevy title -
+    titles are user-editable and mean nothing to anyone else's export. A session
+    holding any home-only exercise is a home session.
+    """
+    out = {"home": [], "gym": []}
+    for _, _, ss in sess:
+        venues = {table[s.exercise].venue for s in ss if s.exercise in table}
+        out["home" if "home" in venues else "gym"] += ss
+    return out
+
+
 def last_gym_kind(sess, table):
     """push/pull of the most recent gym session, or None if there isn't one.
 
@@ -260,6 +279,7 @@ def main(today=None):
         for m in [ex.primary] + ex.secondary:
             last_hit[m] = max(last_hit.get(m, d), d)
 
+    split = by_venue(sess, table)
     prev = last_gym_kind(sess, table)
     nxt = "pull" if prev == "push" else "push"
 
@@ -279,6 +299,9 @@ def main(today=None):
     for i, (label, kind, tail) in enumerate(order):
         on = today + dt.timedelta(days=1 + GAP * i)
         anchor = "⭐" if tail else ANCHOR[kind]
+        # A "both" exercise progresses separately at each venue; everything else
+        # only ever appears at one, so the filter is a no-op for it.
+        hv = split["home"] if kind == "home" else split["gym"]
         head = label if kind == "home" else f"{label} - {kind.capitalize()}"
         out += [f"## {anchor} {head}{tail}", ""]
         before = dict(last_hit)
@@ -286,12 +309,12 @@ def main(today=None):
             pool = home_pool if kind == "home" else gym[cat]
             for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
-                triple, m, mark, note = prescribe(hist, ex)
-                held = stalled(hist, ex)
+                triple, m, mark, note = prescribe(hv, ex)
+                held = stalled(hv, ex)
                 if triple and held >= STALL:
                     # Report where it actually sat, not what is being asked for
                     # now - the prescription is the thing that has not landed.
-                    top, _, _, _ = last_triple(hist, ex)
+                    top, _, _, _ = last_triple(hv, ex)
                     note = (note + " - " if note else "- ") + f"stuck at {fmt(max(top), m)} for {held} sessions"
                 ago = (on - before[x.primary]).days if x.primary in before else 99
                 if ago < FRESH_DAYS and not mark:

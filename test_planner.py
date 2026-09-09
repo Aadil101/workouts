@@ -7,7 +7,7 @@ import datetime as dt
 import unittest
 
 import plan
-from workouts import Ex, Set
+from workouts import Ex, Set, sessions as w_sessions
 
 D = dt.date(2026, 9, 9)
 
@@ -262,6 +262,38 @@ class Prescribe(unittest.TestCase):
         triple, _m, _, note = plan.prescribe([], "nope")
         self.assertIsNone(triple)
         self.assertIn("first time", note)
+
+
+class Venue(unittest.TestCase):
+    """An exercise owned at both places runs two independent ladders. Merging
+    them prescribed the gym's 12.5s for a home session where only 10s exist."""
+
+    TABLE = {"press": ex("chest", venue="gym"), "pushup": ex("chest", venue="home"),
+             "raise": ex("shoulders", venue="both")}
+
+    def split(self, *sessions):
+        hist = [s for session in sessions for s in session]
+        return plan.by_venue(w_sessions(hist), self.TABLE)
+
+    def test_a_session_holding_home_work_is_a_home_session(self):
+        s = self.split(sets("pushup", D, [8, 8, 8], weight=None)
+                       + sets("raise", D, [8, 8, 8], weight=10.0))
+        self.assertEqual({x.exercise for x in s["home"]}, {"pushup", "raise"})
+        self.assertEqual(s["gym"], [])
+
+    def test_the_same_movement_keeps_separate_weights(self):
+        s = self.split(sets("pushup", D - dt.timedelta(days=4), [8], weight=None)
+                       + sets("raise", D - dt.timedelta(days=4), [8, 8, 8], weight=10.0),
+                       sets("press", D - dt.timedelta(days=2), [8], weight=100.0)
+                       + sets("raise", D - dt.timedelta(days=2), [8, 8, 8], weight=12.5))
+        self.assertEqual({x.weight for x in s["home"] if x.exercise == "raise"}, {10.0})
+        self.assertEqual({x.weight for x in s["gym"] if x.exercise == "raise"}, {12.5})
+
+    def test_venue_comes_from_content_not_the_hevy_title(self):
+        """Session titles are user-editable and mean nothing in someone else's
+        export, so the exercise table has to be what decides."""
+        s = self.split(sets("pushup", D, [8], weight=None, venue="Leg Day??"))
+        self.assertEqual(len(s["home"]), 1)
 
 
 class Carryover(unittest.TestCase):
