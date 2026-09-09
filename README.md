@@ -96,8 +96,10 @@ knowing about; not the path I would choose first.
 
 ## Making it yours
 
-`exercises.csv` is tuned to one gym's machines and one person's habits, including a
-universal 3x8 scheme, so it is an example rather than a default. Replace the rows with
+`exercises.csv` is tuned to one gym's machines and one person's habits, so it is an
+example rather than a default. Weight increments are not in it: they are inferred from
+the smallest step your own history has ever moved in, so a cable stack, a pin machine
+and a dumbbell rack each get the right step with nothing to configure. Replace the rows with
 your own exercises, using the exact `exercise_title` strings Hevy writes in its export -
 that string is the join key, and a mismatch drops the exercise silently instead of
 raising an error.
