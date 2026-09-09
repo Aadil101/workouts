@@ -36,6 +36,18 @@ def last_weight(hist, ex):
     return top, clean, prev, prevd
 
 
+def compound_first(chosen, table):
+    """Order a session's picks so the heaviest work comes while you're fresh.
+
+    Staleness is the right rule for choosing exercises and the wrong one for
+    ordering them - it will happily open a session with a wrist curl. The
+    number of muscles an exercise loads is already in the table and is a decent
+    proxy for how compound it is, so no extra column is needed. Sorting is
+    stable, so staleness still breaks ties within a tier.
+    """
+    return sorted(chosen, key=lambda e: -(1 + len(table[e].secondary)))
+
+
 def pick(pool, n, on, last_hit, last_done, table):
     """Stalest primary muscle first; tie-break on the exercise itself."""
     chosen, used = [], set()
@@ -111,7 +123,7 @@ def main(today=None):
         before = dict(last_hit)
         for cat, n in SHAPE[kind]:
             pool = home_pool if kind == "home" else gym[cat]
-            for ex in pick(pool, n, on, last_hit, last_done, table):
+            for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
                 top, clean, prevw, prevd = last_weight(hist, ex)
                 if top:
@@ -133,7 +145,7 @@ def main(today=None):
     os.makedirs(plans, exist_ok=True)
     written = [os.path.join(plans, f"{today}.md"), os.path.join(w.DATA, "plan.md")]
     if SYNC:
-        written.append(os.path.join(SYNC, "plan.md"))
+        written.append(os.path.normpath(os.path.join(SYNC, "plan.md")))
     for path in written:
         try:
             with open(path, "w", encoding="utf-8") as f:

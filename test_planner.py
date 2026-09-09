@@ -57,6 +57,28 @@ class Pick(unittest.TestCase):
         self.assertEqual(got, ["b"])
 
 
+class Ordering(unittest.TestCase):
+    """Selection is by staleness; presentation is by how compound the lift is."""
+    table = {"pulldown": ex("lats", secondary=["upper back", "biceps", "forearms"]),
+             "wristcurl": ex("forearms"),
+             "press": ex("chest", secondary=["shoulders", "triceps"])}
+
+    def test_compounds_come_before_isolation(self):
+        """Shipped bug: a session opened with a wrist curl because it happened
+        to be the stalest thing in the pool."""
+        got = plan.compound_first(["wristcurl", "pulldown", "press"], self.table)
+        self.assertEqual(got, ["pulldown", "press", "wristcurl"])
+
+    def test_ordering_is_stable_within_a_tier(self):
+        table = dict(self.table, other=ex("biceps"))
+        self.assertEqual(plan.compound_first(["wristcurl", "other"], table),
+                         ["wristcurl", "other"])
+
+    def test_keeps_every_exercise(self):
+        got = plan.compound_first(["wristcurl", "pulldown", "press"], self.table)
+        self.assertCountEqual(got, ["wristcurl", "pulldown", "press"])
+
+
 class LastWeight(unittest.TestCase):
     def test_reports_top_set_and_clean_when_all_eights(self):
         hist = sets("a", D - dt.timedelta(days=2), [8, 8, 8], weight=60.0)
