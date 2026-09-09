@@ -15,6 +15,7 @@ SHAPE = {"push": [("push", 4), ("legs", 1), ("core", 1)],
          "home": [("home", 4)]}
 
 
+STALL = 4               # sessions at an unchanged top weight before it is worth saying
 SPLIT = 0.10            # next rung more than this fraction up -> prescribe a split set
 DEFAULT_INC = 5.0       # fallback step when an exercise has only ever seen one weight
 
@@ -86,6 +87,32 @@ def advance(triple, inc):
     tail = list(triple[1:])
     top = max(tail)
     return tail + [top if tail[0] != tail[-1] else round(top + inc, 2)]
+
+
+def stalled(hist, ex):
+    """Sessions since this exercise's top weight last went up.
+
+    A normal ladder holds the top weight for two sessions - (a a b) then
+    (a b b) - and three when a split lands in between, so anything past that is
+    a real plateau rather than the rule working. Deliberately reported and not
+    acted on: his own history has 11- and 12-session stalls that he broke by
+    grinding, and a deload rule would have thrown that progress away.
+    """
+    days = defaultdict(list)
+    for s in hist:
+        if s.exercise == ex and s.weight is not None:
+            days[s.date.date()].append(s.weight)
+    tops = [max(days[d]) for d in sorted(days)]
+    if not tops:
+        return 0
+    # Measured from the last all-time high, not the last increase: coming back up
+    # to a weight after an easier day is recovering ground, not gaining it, and
+    # counting it as progress would quietly reset a plateau that never ended.
+    peak = 0
+    for i, t in enumerate(tops):
+        if t > max(tops[:i], default=0):
+            peak = i
+    return len(tops) - 1 - peak
 
 
 def prescribe(hist, ex):
@@ -198,6 +225,9 @@ def main(today=None):
             for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
                 x = table[ex]
                 triple, mark, note = prescribe(hist, ex)
+                held = stalled(hist, ex)
+                if triple and held >= STALL:
+                    note = (note + " - " if note else "") + f"top set has held at {fmt(max(triple))} for {held} sessions"
                 ago = (on - before[x.primary]).days if x.primary in before else 99
                 if ago < FRESH_DAYS and not mark:
                     mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"

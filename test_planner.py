@@ -126,6 +126,31 @@ class Increment(unittest.TestCase):
         self.assertEqual(plan.increment(ramp("a", D, [(90, 8)]), "a"), plan.DEFAULT_INC)
 
 
+class Stall(unittest.TestCase):
+    """Reported, never acted on - see the docstring on plan.stalled."""
+
+    def days(self, *tops):
+        h = []
+        for i, t in enumerate(tops):
+            h += ramp("a", D - dt.timedelta(days=3 * (len(tops) - i)), [(t, 8)] * 3)
+        return h
+
+    def test_a_normal_ladder_does_not_read_as_stalled(self):
+        """(a a b) and (a b b) share a top weight by design. Counting that as a
+        plateau would put the warning on almost every line and kill its meaning."""
+        self.assertLess(plan.stalled(self.days(95, 100, 100, 105), "a"), plan.STALL)
+
+    def test_counts_sessions_since_the_top_last_moved(self):
+        self.assertEqual(plan.stalled(self.days(40, 45, 45, 45, 45, 45), "a"), 4)
+
+    def test_a_new_top_resets_it(self):
+        self.assertEqual(plan.stalled(self.days(45, 45, 45, 45, 50), "a"), 0)
+
+    def test_a_lighter_session_does_not_reset_it(self):
+        """Backing off for a day is not progress; the plateau is still there."""
+        self.assertEqual(plan.stalled(self.days(45, 45, 40, 45), "a"), 3)
+
+
 class Prescribe(unittest.TestCase):
     def test_clean_session_advances(self):
         hist = ramp("a", D - dt.timedelta(days=2), [(100, 8), (100, 8), (105, 8)])
