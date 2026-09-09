@@ -61,14 +61,38 @@ go stale silently and then quietly corrupt every recommendation downstream.
 ## Usage
 
 ```sh
-python ingest.py ~/Downloads/workout_data.csv   # file an export
-python stale.py                                 # inspect the model
-python plan.py                                  # generate the week
+python ingest.py               # file every export waiting in the sync folder
+python ingest.py some.csv      # or file one explicitly
+python stale.py                # inspect the model
+python plan.py                 # generate the week
+python -m unittest             # run the tests
 ```
 
-Data lives outside this repo - session timestamps reveal when you're at home versus out.
-Point `WORKOUTS_DATA` at a directory containing `exports/`, or it defaults to
-`../workouts-data`.
+Two environment variables, both optional:
+
+| | |
+|---|---|
+| `WORKOUTS_DATA` | directory holding `exports/` and `plans/`. Defaults to `../workouts-data`. |
+| `WORKOUTS_SYNC` | a folder synced to your phone (iCloud, Dropbox, Syncthing, a Tailscale share). `ingest.py` scans it for exports; `plan.py` drops a copy of the plan there. Unset means neither happens. |
+
+**Data lives outside this repo on purpose.** Session timestamps are a log of when you
+are at home versus out, at what times, for how long. That is a different kind of
+sensitive than knowing how much you lift, and it should not be in a public repo or in
+its history.
+
+`ingest.py` names each export from the latest session inside it, so re-ingesting the
+same file is harmless. Scanning the sync folder deletes what it consumes, because iOS
+never overwrites - saving from Hevy repeatedly leaves `workout_data.csv`,
+`workout_data 2.csv`, and so on until you cannot tell which you have processed.
+
+## Running it without a computer
+
+[a-Shell](https://holzschu.github.io/a-Shell_iOS/) makes this viable entirely on an
+iPhone: it ships `python3`, clones over libgit2 (`lg2 clone`), and `pickFolder`
+bookmarks an iCloud directory that scripts can read and write. It works, but debugging
+a title mismatch in `exercises.csv` from a mobile terminal is unpleasant, and the
+folder grants [can be lost](https://github.com/holzschu/a-shell/issues/729). Worth
+knowing about; not the path I would choose first.
 
 ## Making it yours
 

@@ -4,6 +4,7 @@ from collections import namedtuple
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 # Exports and plans live outside this repo: they carry timestamped session data.
+SYNC = os.environ.get("WORKOUTS_SYNC")
 DATA = os.path.normpath(os.environ.get("WORKOUTS_DATA") or os.path.join(ROOT, os.pardir, "workouts-data"))
 Set = namedtuple("Set", "date venue exercise set_index weight reps")
 Ex = namedtuple("Ex", "category venue primary secondary active")

@@ -5,9 +5,11 @@ import workouts as w
 
 FRESH_DAYS = 2          # under this many days since a primary hit -> flag it
 GAP = 2                 # assumed days between sessions, for forward simulation
-TAILDRIVE = os.path.expanduser("~/Documents/taildrive/workout-plan.md")
+# Optional: a synced folder (iCloud, Dropbox, taildrive) to drop a copy of the plan
+# into, for reading on a phone. Unset means the plan lands only in the data repo.
+SYNC = os.environ.get("WORKOUTS_SYNC")
 
-# Stable structure, rotating fill (Q19). Counts are slots, not exercises.
+# Stable structure, rotating fill. Counts are slots, not exercises.
 SHAPE = {"push": [("push", 4), ("legs", 1), ("core", 1)],
          "pull": [("pull", 4), ("legs", 1), ("core", 1)],
          "home": [("home", 4)]}
@@ -54,6 +56,24 @@ def pick(pool, n, on, last_hit, last_done, table):
     return chosen
 
 
+def last_gym_kind(sess, table):
+    """push/pull of the most recent gym session, or None if there isn't one.
+
+    The whole week hangs off this: a wrong answer here silently gives you the
+    same half twice in a row. Home sessions are skipped - they contain pushing
+    work but don't advance the gym cycle.
+    """
+    for _, venue, ss in reversed(sess):
+        cats = [table[s.exercise].category for s in ss
+                if s.exercise in table and table[s.exercise].venue != "home"]
+        if not cats:
+            continue
+        push, pull = cats.count("push"), cats.count("pull")
+        if push or pull:
+            return "push" if push >= pull else "pull"
+    return None
+
+
 def main(today=None):
     today = today or dt.date.today()
     table, hist = w.load_exercises(), w.load_history()
@@ -69,13 +89,7 @@ def main(today=None):
         for m in [ex.primary] + ex.secondary:
             last_hit[m] = max(last_hit.get(m, d), d)
 
-    # Continue the push/pull alternation from the last actual gym session (Q31).
-    prev = None
-    for d, venue, ss in reversed(sess):
-        cats = [table[s.exercise].category for s in ss if s.exercise in table]
-        if venue != "My Home Workout" and ("push" in cats or "pull" in cats):
-            prev = "push" if cats.count("push") >= cats.count("pull") else "pull"
-            break
+    prev = last_gym_kind(sess, table)
     nxt = "pull" if prev == "push" else "push"
 
     gym = {c: [e for e, x in table.items() if x.active and x.category == c and x.venue in ("gym", "both")]
@@ -117,14 +131,17 @@ def main(today=None):
     text = "\n".join(out)
     plans = os.path.join(w.DATA, "plans")
     os.makedirs(plans, exist_ok=True)
-    for path in (os.path.join(plans, f"{today}.md"), os.path.join(w.DATA, "plan.md"), TAILDRIVE):
+    written = [os.path.join(plans, f"{today}.md"), os.path.join(w.DATA, "plan.md")]
+    if SYNC:
+        written.append(os.path.join(SYNC, "plan.md"))
+    for path in written:
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(text)
         except OSError as e:
             print(f"! could not write {path}: {e}", file=sys.stderr)
     print(text)
-    print(f"written to {plans}/{today}.md, {w.DATA}/plan.md, and {TAILDRIVE}")
+    print("written to " + ", ".join(written))
 
 
 if __name__ == "__main__":
