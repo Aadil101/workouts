@@ -73,7 +73,7 @@ Two environment variables, both optional:
 | | |
 |---|---|
 | `WORKOUTS_DATA` | directory holding `exports/` and `plans/`. Defaults to `../workouts-data`. |
-| `WORKOUTS_SYNC` | a folder synced to your phone (iCloud, Dropbox, Syncthing, a Tailscale share). `ingest.py` scans it for exports; `plan.py` drops a copy of the plan there. Unset means neither happens. |
+| `WORKOUTS_SYNC` | a folder synced to your phone (iCloud, Dropbox, Syncthing). `ingest.py` scans it for exports; `plan.py` drops a copy of the plan there. Unset means neither happens. |
 
 **Data lives outside this repo on purpose.** Session timestamps are a log of when you
 are at home versus out, at what times, for how long. That is a different kind of

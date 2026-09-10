@@ -5,7 +5,7 @@ import workouts as w
 
 FRESH_DAYS = 2          # under this many days since a primary hit -> flag it
 GAP = 2                 # assumed days between sessions, for forward simulation
-# Optional: a synced folder (iCloud, Dropbox, taildrive) to drop a copy of the plan
+# Optional: a synced folder (iCloud, Dropbox, Syncthing) to drop a copy of the plan
 # into, for reading on a phone. Unset means the plan lands only in the data repo.
 SYNC = os.environ.get("WORKOUTS_SYNC")
 
