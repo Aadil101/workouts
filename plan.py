@@ -300,9 +300,13 @@ def main(today=None):
     order = [("Gym 1", nxt, ""), ("Gym 2", opp, ""), ("Home", "home", ""),
              ("Gym 3", nxt, ""), ("Gym 4", opp, " (optional)")]
 
-    out = [f"# 🗓️ Week of {today:%b %-d}" if os.name != "nt"
-           else f"# 🗓️ Week of {today:%b %#d}", "",
-           f"Coming off **{prev}**, so the cycle opens with **{nxt}**.",
+    # Plain text, not Markdown. Nothing in the chain renders it - the iPhone
+    # Files app shows a .md as its source - so the asterisks and hashes were
+    # noise in the one place this is actually read. Hierarchy comes from case
+    # and indentation instead, which survive any viewer.
+    out = [f"WEEK OF {today:%b %#d}".upper() if os.name == "nt"
+           else f"WEEK OF {today:%b %-d}".upper(), "",
+           f"Coming off {prev}, so the cycle opens with {nxt}.",
            "Sessions are ordered, not dated.", ""]
 
     for i, (label, kind, tail) in enumerate(order):
@@ -311,8 +315,8 @@ def main(today=None):
         # A "both" exercise progresses separately at each venue; everything else
         # only ever appears at one, so the filter is a no-op for it.
         hv = split["home"] if kind == "home" else split["gym"]
-        head = label if kind == "home" else f"{label} - {kind.capitalize()}"
-        out += [f"## {anchor} {head}{tail}", ""]
+        head = label if kind == "home" else f"{label} - {kind}"
+        out += ["", f"{anchor} {head.upper()}{tail.upper()}", ""]
         before = dict(last_hit)
         for cat, n in SHAPE[kind]:
             pool = home_pool if kind == "home" else gym[cat]
@@ -332,7 +336,8 @@ def main(today=None):
                 line = " · ".join(fmt(t, m) for t in triple) if triple else ""
                 if triple and m == "reps":
                     line += " reps"
-                out += [f"**{ex}**", " ".join(p for p in (line, mark, note) if p).strip(), ""]
+                detail = " ".join(p for p in (line, mark, note) if p).strip()
+                out += [f"  {ex}", f"      {detail}", ""]
                 last_done[ex] = on
                 for m in [x.primary] + x.secondary:
                     last_hit[m] = on
@@ -340,9 +345,9 @@ def main(today=None):
     text = "\n".join(out)
     plans = os.path.join(w.DATA, "plans")
     os.makedirs(plans, exist_ok=True)
-    written = [os.path.join(plans, f"{today}.md"), os.path.join(w.DATA, "plan.md")]
+    written = [os.path.join(plans, f"{today}.txt"), os.path.join(w.DATA, "plan.txt")]
     if SYNC:
-        written.append(os.path.normpath(os.path.join(SYNC, "plan.md")))
+        written.append(os.path.normpath(os.path.join(SYNC, "plan.txt")))
     for path in written:
         try:
             with open(path, "w", encoding="utf-8") as f:
