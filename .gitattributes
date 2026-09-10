@@ -1,0 +1,2 @@
+# A shell script with CRLF fails on macOS with "bad interpreter: /bin/sh^M".
+*.sh text eol=lf
