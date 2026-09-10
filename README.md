@@ -94,6 +94,23 @@ a title mismatch in `exercises.csv` from a mobile terminal is unpleasant, and th
 folder grants [can be lost](https://github.com/holzschu/a-shell/issues/729). Worth
 knowing about; not the path I would choose first.
 
+## The weekly loop
+
+`weekly.sh` is the whole thing in one command - pull the data repo, file any export
+sitting in the sync folder, write the plan, commit and push:
+
+```sh
+~/src/workouts/weekly.sh
+```
+
+It is safe to run whenever. A week with no new export is normal, not an error, and
+running it twice in a day just writes the same plan again.
+
+To make that a single click on macOS, wrap it in a Shortcut: **Run Shell Script**,
+one line, `$HOME/src/workouts/weekly.sh`. Pin it to the menu bar and the weekly loop
+becomes one click. A `.command` file that Finder can open works too, and `launchd`
+will run it on a schedule if you would rather it just happened.
+
 ## Making it yours
 
 `exercises.csv` is tuned to one gym's machines and one person's habits, so it is an
