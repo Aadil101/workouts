@@ -106,10 +106,12 @@ sitting in the sync folder, write the plan, commit and push:
 It is safe to run whenever. A week with no new export is normal, not an error, and
 running it twice in a day just writes the same plan again.
 
-To make that a single click on macOS, wrap it in a Shortcut: **Run Shell Script**,
-one line, `$HOME/src/workouts/weekly.sh`. Pin it to the menu bar and the weekly loop
-becomes one click. A `.command` file that Finder can open works too, and `launchd`
-will run it on a schedule if you would rather it just happened.
+To make that a single click on macOS, save a one-line `.command` file that Finder can
+open, and keep it in the Dock. Shortcuts works too on Monterey and later, and
+`launchd` will run it on a schedule if you would rather it just happened.
+
+Whatever launches it, remember that a double-clicked script does not read `~/.zshrc` -
+put `WORKOUTS_SYNC` in `~/.zshenv`, which zsh reads for non-interactive shells too.
 
 ## Making it yours
 

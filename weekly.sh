@@ -11,6 +11,10 @@ PY=$(command -v python3 || command -v python || true)
 [ -n "$PY" ] || { echo "no python3 on PATH - try: xcode-select --install" >&2; exit 1; }
 DATA=${WORKOUTS_DATA:-$(cd "$ROOT/.." && pwd)/workouts-data}
 
+# Easy to miss otherwise: the plan still lands in the data repo, so the run looks
+# fine while the phone quietly keeps reading last week's.
+[ -n "${WORKOUTS_SYNC:-}" ] || echo "! WORKOUTS_SYNC is unset - the plan will not reach your phone" >&2
+
 if [ -d "$DATA/.git" ]; then
     git -C "$DATA" pull --quiet --rebase || echo "! pull failed - carrying on with local data"
 fi
