@@ -7,6 +7,14 @@
 set -eu
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
+
+# Update the planner itself first, then restart on the new copy - otherwise a
+# change to the code only reaches this machine after someone remembers to pull.
+# Fast-forward only: this checkout is for running, never for editing.
+if [ -z "${WEEKLY_UPDATED:-}" ] && [ -d "$ROOT/.git" ]; then
+    git -C "$ROOT" pull --quiet --ff-only || echo "! could not update the planner - running the copy you have" >&2
+    WEEKLY_UPDATED=1 exec sh "$0" "$@"
+fi
 PY=$(command -v python3 || command -v python || true)
 [ -n "$PY" ] || { echo "no python3 on PATH - try: xcode-select --install" >&2; exit 1; }
 DATA=${WORKOUTS_DATA:-$(cd "$ROOT/.." && pwd)/workouts-data}
