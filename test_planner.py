@@ -91,6 +91,36 @@ class Ordering(unittest.TestCase):
         self.assertCountEqual(got, ["wristcurl", "pulldown", "press"])
 
 
+class Spread(unittest.TestCase):
+    """Neighbours in a session should not share muscles when it can be helped."""
+    table = {"pulldown": ex("lats", "pull", secondary=["upper back", "biceps", "forearms"]),
+             "row": ex("upper back", "pull", secondary=["lats", "biceps", "forearms"]),
+             "curl": ex("biceps", "pull"),
+             "legpress": ex("quads", "legs", secondary=["hamstrings", "glutes"]),
+             "crunch": ex("abdominals", "core")}
+
+    def test_a_pulldown_is_not_followed_by_a_row(self):
+        """The order he avoids at the gym: the row starts on lats the
+        pulldown just finished with."""
+        got = plan.spread(["pulldown", "row", "curl", "legpress", "crunch"], self.table)
+        self.assertNotEqual(abs(got.index("pulldown") - got.index("row")), 1)
+
+    def test_no_neighbours_share_a_muscle_when_avoidable(self):
+        got = plan.spread(["pulldown", "row", "curl", "legpress", "crunch"], self.table)
+        self.assertEqual(sum(plan.overlap(a, b, self.table) for a, b in zip(got, got[1:])), 0)
+
+    def test_compounds_still_lead(self):
+        """Scoring every pair rather than just neighbours pushed the row to the
+        last slot - the fatigue problem compound_first exists to prevent."""
+        got = plan.spread(["curl", "crunch", "legpress", "row", "pulldown"], self.table)
+        self.assertLess(got.index("pulldown"), 3)
+        self.assertLess(got.index("row"), 3)
+
+    def test_keeps_every_exercise(self):
+        got = plan.spread(["pulldown", "row", "curl"], self.table)
+        self.assertCountEqual(got, ["pulldown", "row", "curl"])
+
+
 def ramp(exercise, day, pairs):
     """A session of (weight, reps) pairs - the ascending ladders he actually does."""
     return [Set(dt.datetime(day.year, day.month, day.day, 18, 0), "My Workout",

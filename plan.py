@@ -1,5 +1,6 @@
 """Weekly session plan. Deterministic: same history in, same plan out."""
 import os, sys, datetime as dt
+from itertools import permutations
 from collections import defaultdict
 import workouts as w
 
@@ -216,6 +217,32 @@ def compound_first(chosen, table):
     return sorted(chosen, key=lambda e: -(1 + len(table[e].secondary)))
 
 
+def overlap(a, b, table, half=0.5):
+    """How much two exercises load the same muscles. Secondaries count half."""
+    def load(e):
+        x = table[e]
+        return {**{m: half for m in x.secondary}, x.primary: 1.0}
+    la, lb = load(a), load(b)
+    return sum(v * lb.get(m, 0) for m, v in la.items())
+
+
+def spread(chosen, table):
+    """Order a session so neighbours share as few muscles as possible.
+
+    A pulldown straight into a row means the row starts on lats that just
+    finished working. Only adjacent pairs are scored: pushing shared muscles as
+    far apart as possible also pushed the big compounds to the end of the
+    session, which is the one thing compound_first exists to prevent. Among
+    equally spread orders, the compound-first one wins, so the heavy work still
+    comes early. Sessions are six exercises at most - 720 orders - so this just
+    tries them all.
+    """
+    rank = {e: i for i, e in enumerate(compound_first(chosen, table))}
+    return list(min(permutations(chosen),
+                    key=lambda p: (round(sum(overlap(a, b, table) for a, b in zip(p, p[1:])), 6),
+                                   [rank[e] for e in p])))
+
+
 def pick(pool, n, on, last_hit, last_done, table):
     """Stalest primary muscle first; tie-break on the exercise itself."""
     chosen, used = [], set()
@@ -318,29 +345,35 @@ def main(today=None):
         head = label if kind == "home" else f"{label} - {kind}"
         out += ["", f"{anchor} {head.upper()}{tail.upper()}", ""]
         before = dict(last_hit)
+        # Choose per slot, order across the whole session: the leg and core
+        # slots are what separate two lifts that share a muscle.
+        chosen = []
         for cat, n in SHAPE[kind]:
             pool = home_pool if kind == "home" else gym[cat]
-            for ex in compound_first(pick(pool, n, on, last_hit, last_done, table), table):
-                x = table[ex]
-                venue = "home" if kind == "home" else "gym"
-                triple, m, mark, note = prescribe(hv, ex, limits.get((ex, venue)))
-                held = stalled(hv, ex)
-                if triple and held >= STALL and not note:
-                    # Report where it actually sat, not what is being asked for
-                    # now - the prescription is the thing that has not landed.
-                    top, _, _, _ = last_triple(hv, ex)
-                    note = (note + " - " if note else "- ") + f"stuck at {fmt(max(top), m)} for {held} sessions"
-                ago = (on - before[x.primary]).days if x.primary in before else 99
-                if ago < FRESH_DAYS and not mark:
-                    mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"
-                line = " · ".join(fmt(t, m) for t in triple) if triple else ""
-                if triple and m == "reps":
-                    line += " reps"
-                detail = " ".join(p for p in (line, mark, note) if p).strip()
-                out += [f"  {ex}", f"      {detail}", ""]
+            got = pick(pool, n, on, last_hit, last_done, table)
+            chosen += got
+            for ex in got:
                 last_done[ex] = on
-                for m in [x.primary] + x.secondary:
+                for m in [table[ex].primary] + table[ex].secondary:
                     last_hit[m] = on
+        for ex in spread(chosen, table):
+            x = table[ex]
+            venue = "home" if kind == "home" else "gym"
+            triple, m, mark, note = prescribe(hv, ex, limits.get((ex, venue)))
+            held = stalled(hv, ex)
+            if triple and held >= STALL and not note:
+                # Report where it actually sat, not what is being asked for
+                # now - the prescription is the thing that has not landed.
+                top, _, _, _ = last_triple(hv, ex)
+                note = (note + " - " if note else "- ") + f"stuck at {fmt(max(top), m)} for {held} sessions"
+            ago = (on - before[x.primary]).days if x.primary in before else 99
+            if ago < FRESH_DAYS and not mark:
+                mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"
+            line = " · ".join(fmt(t, m) for t in triple) if triple else ""
+            if triple and m == "reps":
+                line += " reps"
+            detail = " ".join(p for p in (line, mark, note) if p).strip()
+            out += [f"  {ex}", f"      {detail}", ""]
 
     text = "\n".join(out)
     plans = os.path.join(w.DATA, "plans")
