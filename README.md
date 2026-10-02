@@ -38,7 +38,7 @@ one continuous history, and fills a fixed session shape with whatever is stalest
         |
         +--> stale.py    per-muscle staleness, per-exercise state, collision audit
         |
-        +--> plan.py     one week of sessions -> Markdown
+        +--> plan.py     one week of sessions -> plain text
 ```
 
 **Exports accumulate rather than replace.** Hevy's free tier caps stats views at three
@@ -96,8 +96,9 @@ knowing about; not the path I would choose first.
 
 ## The weekly loop
 
-`weekly.sh` is the whole thing in one command - pull the data repo, file any export
-sitting in the sync folder, write the plan, commit and push:
+`weekly.sh` is the whole thing in one command - update the planner itself, pull the
+data repo, file any export sitting in the sync folder, write the plan, commit and push.
+A machine that only runs the planner therefore never needs a manual `git pull`:
 
 ```sh
 ~/src/workouts/weekly.sh
@@ -136,3 +137,8 @@ The session shape (`SHAPE` in `plan.py`) is push/pull alternating with one rotat
 machine and one core slot per gym session, plus a short home session. Rotation is only
 as varied as the pool: with fewer distinct primary muscles than session slots, the same
 exercises will recur. That is a property of the equipment list, not a bug.
+
+Slots are filled per category but ordered across the whole session, so that
+neighbouring exercises share as few muscles as possible - a pulldown is not followed
+straight by a row. In practice the leg and core slots land between upper-body lifts.
+Among equally spread orders the most compound lifts still go first.
