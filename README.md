@@ -1,13 +1,14 @@
 # workouts
 
-A deterministic weekly session planner built on top of [Hevy](https://www.hevyapp.com/)
-exports. It answers one question Hevy doesn't: **what should I do this session, given
-what I've hit recently?**
+Tools built on top of [Hevy](https://www.hevyapp.com/) exports, for what the app
+doesn't answer. The core is a deterministic weekly session planner: **what should I do
+this session, given what I've hit recently?**
 
-Hevy already does analytics well - volume charts, per-exercise progression, personal
-records. What it doesn't do is look at the last two weeks and tell you that your chest
-has been worked three days running while your hamstrings haven't been touched since
-Tuesday. That gap is the whole reason this exists.
+Hevy's analytics are good - volume charts, per-exercise progression, personal records -
+but nothing in it looks at the last two weeks and tells you that your chest has been
+worked three days running while your hamstrings haven't been touched since Tuesday. The
+planner exists for that gap. Smaller tools belong here too when they fill a similar one,
+such as all-time stats that Hevy's free tier only shows for the last three months.
 
 No LLM at generation time. Same history in, same plan out.
 
@@ -69,6 +70,7 @@ python ingest.py               # merge every export waiting in the sync folder
 python ingest.py some.csv      # or merge one explicitly
 python stale.py                # inspect the model
 python plan.py                 # generate the week
+python stats.py                # all-time per-exercise charts -> stats.html
 python -m unittest             # run the tests
 ```
 

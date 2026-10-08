@@ -7,6 +7,7 @@ import datetime as dt
 import unittest
 
 import plan
+import stats
 from workouts import Ex, Set, sessions as w_sessions
 
 D = dt.date(2026, 9, 9)
@@ -404,3 +405,32 @@ class Carryover(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Stats(unittest.TestCase):
+    """Each type gets Hevy's metrics for it, one point per session."""
+
+    def test_weight_metrics(self):
+        _, pts = stats.series(sets("a", D, [10, 8], weight=50.0) + sets("a", D + dt.timedelta(2), [5], weight=60.0))["a"]
+        self.assertEqual([v for _, v in pts["Heaviest Weight"]], [50.0, 60.0])
+        self.assertEqual([v for _, v in pts["Session Volume"]], [900.0, 300.0])
+        self.assertEqual([v for _, v in pts["Best Set Volume"]], [500.0, 300.0])
+        self.assertAlmostEqual(pts["One Rep Max"][0][1], 50 / 0.75)
+
+    def test_one_rep_is_exact(self):
+        self.assertEqual(stats.e1rm(sets("a", D, [1], weight=100.0)[0]), 100.0)
+
+    def test_one_rep_max_matches_the_app(self):
+        """65 lb x 8 reads 80.25 in Hevy; Brzycki said 80.7."""
+        self.assertEqual(round(stats.e1rm(sets("a", D, [8], weight=65.0)[0]), 2), 80.25)
+
+    def test_past_thirty_reps_stays_at_half(self):
+        self.assertEqual(stats.e1rm(sets("a", D, [35], weight=20.0)[0]), 40.0)
+
+    def test_a_hold_reports_time_not_reps(self):
+        m, pts = stats.series(held("a", D, [60, 45]))["a"]
+        self.assertEqual((m, pts["Best Time"][0][1], pts["Total Time"][0][1]), ("time", 60, 105))
+
+    def test_bodyweight_reps(self):
+        _, pts = stats.series(bodyweight("a", D, [10, 8]))["a"]
+        self.assertEqual((pts["Most Reps (Set)"][0][1], pts["Session Reps"][0][1]), (10, 18))

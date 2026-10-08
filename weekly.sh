@@ -31,6 +31,8 @@ fi
 "$PY" "$ROOT/ingest.py" || true
 
 "$PY" "$ROOT/plan.py"
+# Charts are a nicety; a failure here must not stop the plan being committed.
+"$PY" "$ROOT/stats.py" || echo "! stats.py failed - the plan is unaffected" >&2
 
 if [ -d "$DATA/.git" ] && [ -n "$(git -C "$DATA" status --porcelain)" ]; then
     git -C "$DATA" add -A
