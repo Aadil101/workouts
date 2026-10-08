@@ -8,7 +8,7 @@ def main(today=None):
     today = today or dt.date.today()
     table, hist = w.load_exercises(), w.load_history()
     if not hist:
-        sys.exit("no exports found in exports/")
+        sys.exit("no history yet - run ingest.py on a Hevy export first")
     sess = w.sessions(hist)
     print(f"as of {today} | {len(sess)} sessions, {hist[0].date.date()} -> {hist[-1].date.date()}\n")
 

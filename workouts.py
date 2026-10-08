@@ -1,11 +1,12 @@
 """Shared loading for Hevy exports and the exercise table."""
-import csv, glob, os, datetime as dt
+import csv, os, datetime as dt
 from collections import namedtuple
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 # Exports and plans live outside this repo: they carry timestamped session data.
 SYNC = os.environ.get("WORKOUTS_SYNC")
 DATA = os.path.normpath(os.environ.get("WORKOUTS_DATA") or os.path.join(ROOT, os.pardir, "workouts-data"))
+HISTORY = os.path.join(DATA, "history.csv")
 Set = namedtuple("Set", "date venue exercise set_index weight reps duration")
 Ex = namedtuple("Ex", "category venue primary secondary active")
 
@@ -43,29 +44,25 @@ def load_exercises(path=None):
     return out
 
 
-def load_history(exports_dir=None):
-    """Union of every export, deduped. Overlapping dumps are the point:
-    if Hevy's free export is a rolling window, the union is still complete."""
-    seen, sets = set(), []
-    for path in sorted(glob.glob(os.path.join(exports_dir or os.path.join(DATA, "exports"), "*.csv"))):
-        with open(path, newline="", encoding="utf-8-sig") as f:
-            for r in csv.DictReader(f):
-                key = (r["start_time"], r["exercise_title"], r["set_index"])
-                if key in seen:
-                    continue
-                seen.add(key)
-                sets.append(Set(
-                    dt.datetime.strptime(r["start_time"], "%d %b %Y, %H:%M"),
-                    r["title"],
-                    r["exercise_title"],
-                    int(r["set_index"]),
-                    float(r["weight_lbs"]) if r["weight_lbs"] else None,
-                    int(r["reps"]) if r["reps"] else None,
-                    # Bodyweight holds live here: a plank logs seconds and no
-                    # weight at all, so dropping this column made every timed
-                    # exercise look like it had never been done.
-                    int(r["duration_seconds"]) if r.get("duration_seconds") else None,
-                ))
+def load_history(path=None):
+    """Every logged set, from the history ingest.py maintains. Empty if none yet."""
+    sets, p = [], path or HISTORY
+    if not os.path.exists(p):
+        return sets
+    with open(p, newline="", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f):
+            sets.append(Set(
+                dt.datetime.strptime(r["start_time"], "%d %b %Y, %H:%M"),
+                r["title"],
+                r["exercise_title"],
+                int(r["set_index"]),
+                float(r["weight_lbs"]) if r["weight_lbs"] else None,
+                int(r["reps"]) if r["reps"] else None,
+                # Bodyweight holds live here: a plank logs seconds and no
+                # weight at all, so dropping this column made every timed
+                # exercise look like it had never been done.
+                int(r["duration_seconds"]) if r.get("duration_seconds") else None,
+            ))
     return sorted(sets, key=lambda s: (s.date, s.exercise, s.set_index))
 
 

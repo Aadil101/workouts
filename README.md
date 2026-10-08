@@ -29,21 +29,25 @@ one continuous history, and fills a fixed session shape with whatever is stalest
   Hevy iPhone app
         |  export CSV
         v
-   ingest.py ---------> exports/YYYY-MM-DD.csv     (raw dumps, never edited,
-        |                                           named from their own contents)
+   ingest.py ---------> history.csv                (every export merged in;
+        |                                           latest-export.csv is the raw dump)
         |               exercises.csv              (muscle table: anatomy from Hevy,
         |                    |                      category + venue are ours)
         v                    v
-   workouts.py  <-----------+   load, dedupe, weight secondary muscles at 0.5
+   workouts.py  <-----------+   load, weight secondary muscles at 0.5
         |
         +--> stale.py    per-muscle staleness, per-exercise state, collision audit
         |
         +--> plan.py     one week of sessions -> plain text
 ```
 
-**Exports accumulate rather than replace.** Hevy's free tier caps stats views at three
-months, and its CSV export may follow the same window. Keeping every dated dump means
-the union stays complete even if any single export is truncated.
+**History is merged, not replaced.** Hevy's free tier caps stats views at three months.
+Its CSV export currently returns everything, but nothing promises it will. Each export
+is trusted inside its own date range, so edits and deletions made in Hevy come through,
+and everything older is kept. If Hevy ever trims exports, older sessions stay in
+history, and ingest says so loudly rather than dropping them. Removed sessions are
+listed by name for the same reason. The raw dump overwrites `latest-export.csv`, so git
+history still holds every export while the disk holds one.
 
 **The muscle table is the one hand-authored file.** Anatomy columns are copied verbatim
 from what the Hevy app displays, so any row can be verified against the app in seconds
@@ -61,8 +65,8 @@ go stale silently and then quietly corrupt every recommendation downstream.
 ## Usage
 
 ```sh
-python ingest.py               # file every export waiting in the sync folder
-python ingest.py some.csv      # or file one explicitly
+python ingest.py               # merge every export waiting in the sync folder
+python ingest.py some.csv      # or merge one explicitly
 python stale.py                # inspect the model
 python plan.py                 # generate the week
 python -m unittest             # run the tests
@@ -72,7 +76,7 @@ Two environment variables, both optional:
 
 | | |
 |---|---|
-| `WORKOUTS_DATA` | directory holding `exports/` and `plans/`. Defaults to `../workouts-data`. |
+| `WORKOUTS_DATA` | directory holding `history.csv` and `plans/`. Defaults to `../workouts-data`. |
 | `WORKOUTS_SYNC` | a folder synced to your phone (iCloud, Dropbox, Syncthing). `ingest.py` scans it for exports; `plan.py` drops a copy of the plan there. Unset means neither happens. |
 
 **Data lives outside this repo on purpose.** Session timestamps are a log of when you
@@ -80,10 +84,10 @@ are at home versus out, at what times, for how long. That is a different kind of
 sensitive than knowing how much you lift, and it should not be in a public repo or in
 its history.
 
-`ingest.py` names each export from the latest session inside it, so re-ingesting the
-same file is harmless. Scanning the sync folder deletes what it consumes, because iOS
-never overwrites - saving from Hevy repeatedly leaves `workout_data.csv`,
-`workout_data 2.csv`, and so on until you cannot tell which you have processed.
+Re-ingesting the same export is harmless: merging it again changes nothing. Scanning
+the sync folder deletes what it consumes, because iOS never overwrites - saving from
+Hevy repeatedly leaves `workout_data.csv`, `workout_data 2.csv`, and so on until you
+cannot tell which you have processed. Several at once are merged oldest first.
 
 ## Running it without a computer
 
@@ -97,7 +101,7 @@ knowing about; not the path I would choose first.
 ## The weekly loop
 
 `weekly.sh` is the whole thing in one command - update the planner itself, pull the
-data repo, file any export sitting in the sync folder, write the plan, commit and push.
+data repo, merge any export sitting in the sync folder, write the plan, commit and push.
 A machine that only runs the planner therefore never needs a manual `git pull`:
 
 ```sh
