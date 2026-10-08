@@ -125,7 +125,9 @@ your spare room never get confused for each other.
 
 The one thing that cannot be inferred is a ceiling: running out of equipment and
 plateauing look identical in a history. An optional `limits.csv` in the data repo
-(`exercise,venue,max`) holds a prescription back where the weights run out. It lives
+(`exercise,venue,max,step`) holds a prescription back where the weights run out. Its
+optional `step` column overrides the inferred increment, for the day a one-off session on
+a finer stack would otherwise teach the planner a step your usual machine doesn't have. It lives
 there rather than here because what your rack holds is nobody else's business. An exercise
 marked `both` runs a separate ladder per venue, so the gym's dumbbell rack and whatever
 is in your spare room never get confused for each other. Replace the rows with

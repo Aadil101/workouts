@@ -173,17 +173,18 @@ def stalled(hist, ex):
     return len(tops) - 1 - peak
 
 
-def prescribe(hist, ex, cap=None):
+def prescribe(hist, ex, cap=None, step=None):
     """The values to load or hold, plus a marker and a note.
 
     'cap' is the heaviest this exercise can go at the venue being planned. It
     only ever holds a prescription back; the ladder is otherwise unaware of it.
+    'step', if given, replaces the increment inferred from history.
     """
     triple, clean, when, touched = last_triple(hist, ex)
     m = mode(hist, ex)
     if triple is None:
         return None, m, "🆕", "first time - start easy and log it"
-    inc = increment(hist, ex)
+    inc = step or increment(hist, ex)
     if not clean:
         return triple, m, "⚠️", f"repeat - did not finish on {when}"
     if m != "weight":
@@ -359,7 +360,7 @@ def main(today=None):
         for ex in spread(chosen, table):
             x = table[ex]
             venue = "home" if kind == "home" else "gym"
-            triple, m, mark, note = prescribe(hv, ex, limits.get((ex, venue)))
+            triple, m, mark, note = prescribe(hv, ex, *limits.get((ex, venue), (None, None)))
             held = stalled(hv, ex)
             if triple and held >= STALL and not note:
                 # Report where it actually sat, not what is being asked for

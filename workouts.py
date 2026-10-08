@@ -11,12 +11,15 @@ Ex = namedtuple("Ex", "category venue primary secondary active")
 
 
 def load_limits(path=None):
-    """(exercise, venue) -> heaviest load available there. Optional; may be empty.
+    """(exercise, venue) -> (max, step). Optional file; either column may be blank.
 
     Lives in the data repo rather than next to exercises.csv for two reasons.
     It is equipment, so it is nobody else's business what your rack holds, and
     it is the one thing about a setup that cannot be inferred: a ceiling and a
-    plateau look identical in the history. Columns: exercise,venue,max.
+    plateau look identical in the history. Columns: exercise,venue,max,step.
+
+    'step' overrides the inferred increment, for when the history lies - one
+    session on a machine with a finer stack teaches a step the usual one lacks.
     """
     out = {}
     p = path or os.path.join(DATA, "limits.csv")
@@ -24,7 +27,8 @@ def load_limits(path=None):
         return out
     with open(p, newline="") as f:
         for r in csv.DictReader(f):
-            out[(r["exercise"].strip(), r["venue"].strip())] = float(r["max"])
+            num = lambda k: float(r[k]) if (r.get(k) or "").strip() else None
+            out[(r["exercise"].strip(), r["venue"].strip())] = (num("max"), num("step"))
     return out
 
 

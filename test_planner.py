@@ -163,6 +163,14 @@ class Increment(unittest.TestCase):
         hist = ramp("a", D, [(30, 8), (35, 8), (55, 8)])
         self.assertEqual(plan.increment(hist, "a"), 5)
 
+    def test_declared_step_beats_a_one_off(self):
+        """One session on a finer stack must not halve the step for good."""
+        hist = (ramp("a", D - dt.timedelta(days=12), [(100, 8)] * 3)
+                + ramp("a", D - dt.timedelta(days=9), [(102.5, 8)] * 3)
+                + ramp("a", D - dt.timedelta(days=3), [(107.5, 8)] * 3))
+        self.assertEqual(plan.increment(hist, "a"), 2.5)
+        self.assertEqual(plan.prescribe(hist, "a", step=7.5)[0], [107.5, 107.5, 115])
+
     def test_single_weight_guesses_by_load(self):
         self.assertEqual(plan.increment(ramp("a", D, [(10, 8)]), "a"), 2.5)
         self.assertEqual(plan.increment(ramp("a", D, [(90, 8)]), "a"), plan.DEFAULT_INC)
