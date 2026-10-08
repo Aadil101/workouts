@@ -434,3 +434,11 @@ class Stats(unittest.TestCase):
     def test_bodyweight_reps(self):
         _, pts = stats.series(bodyweight("a", D, [10, 8]))["a"]
         self.assertEqual((pts["Most Reps (Set)"][0][1], pts["Session Reps"][0][1]), (10, 18))
+
+    def test_labels_read_like_hevy(self):
+        self.assertEqual([stats.num(101, "time"), stats.num(45, "time"), stats.num(120, "time")],
+                         ["1min 41s", "45s", "2min"])
+        self.assertEqual(stats.num(85.0, "lbs"), "85 lbs")
+        today = dt.date(2026, 10, 7)
+        self.assertEqual(stats.day(dt.date(2026, 9, 8), today), "Sep 8")
+        self.assertEqual(stats.day(dt.date(2025, 9, 8), today), "Sep 8, 2025")

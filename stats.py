@@ -3,7 +3,7 @@
 Deliberately the same metrics Hevy shows on an exercise's page, so a chart here
 can be checked against the app's for any window the app still covers.
 """
-import os, sys, html
+import os, sys, html, datetime as dt
 from collections import defaultdict
 import workouts as w
 from plan import mode
@@ -22,19 +22,19 @@ def e1rm(s):
 
 METRICS = {
     "weight": [
-        ("Heaviest Weight", "lb", lambda ss: max(s.weight for s in ss)),
-        ("One Rep Max", "lb", lambda ss: max(e1rm(s) for s in ss)),
-        ("Best Set Volume", "lb", lambda ss: max(s.weight * s.reps for s in ss)),
-        ("Session Volume", "lb", lambda ss: sum(s.weight * s.reps for s in ss)),
-        ("Total Reps", "", lambda ss: sum(s.reps for s in ss)),
+        ("Heaviest Weight", "lbs", lambda ss: max(s.weight for s in ss)),
+        ("One Rep Max", "lbs", lambda ss: max(e1rm(s) for s in ss)),
+        ("Best Set Volume", "lbs", lambda ss: max(s.weight * s.reps for s in ss)),
+        ("Session Volume", "lbs", lambda ss: sum(s.weight * s.reps for s in ss)),
+        ("Total Reps", "reps", lambda ss: sum(s.reps for s in ss)),
     ],
     "reps": [
-        ("Most Reps (Set)", "", lambda ss: max(s.reps for s in ss)),
-        ("Session Reps", "", lambda ss: sum(s.reps for s in ss)),
+        ("Most Reps (Set)", "reps", lambda ss: max(s.reps for s in ss)),
+        ("Session Reps", "reps", lambda ss: sum(s.reps for s in ss)),
     ],
     "time": [
-        ("Best Time", "s", lambda ss: max(s.duration for s in ss)),
-        ("Total Time", "s", lambda ss: sum(s.duration for s in ss)),
+        ("Best Time", "time", lambda ss: max(s.duration for s in ss)),
+        ("Total Time", "time", lambda ss: sum(s.duration for s in ss)),
     ],
 }
 
@@ -65,7 +65,17 @@ def series(hist):
 
 
 def num(x, unit):
-    return f"{round(x, 1):g}{unit and ' ' + unit}"
+    """Hevy's spelling: '85 lbs', '11 reps', '1min 41s'."""
+    if unit != "time":
+        return f"{round(x, 1):g} {unit}"
+    m, sec = divmod(round(x), 60)
+    return " ".join(p for p in (m and f"{m}min", sec and f"{sec}s") if p) or "0s"
+
+
+def day(d, today=None):
+    """'Sep 8', with the year only once it stops being this one."""
+    today = today or dt.date.today()
+    return f"{d:%b} {d.day}" + (f", {d.year}" if d.year != today.year else "")
 
 
 def chart(pts, unit, wd=600, ht=150, pad=24):
@@ -77,12 +87,20 @@ def chart(pts, unit, wd=600, ht=150, pad=24):
     px = lambda x: pad + (x - x0) / (x1 - x0) * (wd - 2 * pad)
     py = lambda y: ht - pad - (y - y0) / (y1 - y0) * (ht - 2 * pad)
     line = " ".join(f"{px(x):.1f},{py(y):.1f}" for x, y in zip(xs, ys))
-    dots = "".join(f'<circle cx="{px(x):.1f}" cy="{py(y):.1f}" r="3"><title>{d:%d %b %Y}: {num(v, unit)}</title></circle>'
-                   for x, y, (d, v) in zip(xs, ys, pts))
+    # Each point owns the strip of x nearest to it, so a tap anywhere picks a point
+    # however dense the chart gets. CSS :hover rather than script, because the
+    # iPhone Files preview does not run JavaScript.
+    cuts = [0] + [(px(a) + px(b)) / 2 for a, b in zip(xs, xs[1:])] + [wd]
+    pts_svg = "".join(
+        f'<g class="pt"><rect x="{l:.1f}" width="{r - l:.1f}" height="{ht}"/>'
+        f'<circle cx="{px(x):.1f}" cy="{py(y):.1f}" r="3"/>'
+        f'<text class="tip" x="{min(max(px(x), 60), wd - 60):.1f}" y="{max(py(y) - 10, 12):.1f}" text-anchor="middle">'
+        f'{num(v, unit)} · {day(d)}</text></g>'
+        for x, y, (d, v), l, r in zip(xs, ys, pts, cuts, cuts[1:]))
     return (f'<svg viewBox="0 0 {wd} {ht}" role="img">'
             f'<text x="2" y="{pad - 8}">{num(y1, unit)}</text><text x="2" y="{ht - 4}">{num(y0, unit)}</text>'
             f'<text x="{wd - 2}" y="{ht - 4}" text-anchor="end">{pts[0][0]:%d %b %Y} – {pts[-1][0]:%d %b %Y}</text>'
-            f'<polyline points="{line}"/>{dots}</svg>')
+            f'<polyline points="{line}"/>{pts_svg}</svg>')
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8">
@@ -97,6 +115,8 @@ table {{ border-collapse:collapse; margin:8px 0; }} td {{ padding:2px 12px 2px 0
 h3 {{ font-size:14px; margin:16px 0 0; }}
 svg {{ width:100%; height:auto; }} svg text {{ fill:var(--muted); font-size:11px; }}
 polyline {{ fill:none; stroke:var(--line); stroke-width:2; }} circle {{ fill:var(--line); }}
+.pt {{ cursor:pointer; }} .pt rect {{ fill:transparent; }} .pt .tip {{ visibility:hidden; fill:var(--fg); font-size:13px; font-weight:600; }}
+.pt:hover .tip {{ visibility:visible; }} .pt:hover circle {{ r:5; }}
 </style></head><body><h1>Lifting Stats</h1><p class="muted">{summary}</p>{body}</body></html>"""
 
 
