@@ -363,10 +363,10 @@ def main(today=None):
             triple, m, mark, note = prescribe(hv, ex, *limits.get((ex, venue), (None, None)))
             held = stalled(hv, ex)
             if triple and held >= STALL and not note:
-                # Report where it actually sat, not what is being asked for
-                # now - the prescription is the thing that has not landed.
-                top, _, _, _ = last_triple(hv, ex)
-                note = (note + " - " if note else "- ") + f"stuck at {fmt(max(top), m)} for {held} sessions"
+                # The peak 'held' counts from - after a lighter day the last
+                # session's top is not where the plateau is.
+                peak = max(value(s, m) for s in hv if s.exercise == ex and value(s, m) is not None)
+                note = (note + " - " if note else "- ") + f"stuck at {fmt(peak, m)} for {held} sessions"
             ago = (on - before[x.primary]).days if x.primary in before else 99
             if ago < FRESH_DAYS and not mark:
                 mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"
