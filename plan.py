@@ -173,6 +173,17 @@ def stalled(hist, ex):
     return len(tops) - 1 - peak
 
 
+def stall_note(hist, ex):
+    """'stuck at X for N sessions', or '' below STALL. X is the peak the count
+    runs from - after a lighter day the last session's top is not the plateau."""
+    held = stalled(hist, ex)
+    if held < STALL:
+        return ""
+    m = mode(hist, ex)
+    peak = max(value(s, m) for s in hist if s.exercise == ex and value(s, m) is not None)
+    return f"stuck at {fmt(peak, m)} for {held} sessions"
+
+
 def prescribe(hist, ex, cap=None, step=None):
     """The values to load or hold, plus a marker and a note.
 
@@ -361,12 +372,8 @@ def main(today=None):
             x = table[ex]
             venue = "home" if kind == "home" else "gym"
             triple, m, mark, note = prescribe(hv, ex, *limits.get((ex, venue), (None, None)))
-            held = stalled(hv, ex)
-            if triple and held >= STALL and not note:
-                # The peak 'held' counts from - after a lighter day the last
-                # session's top is not where the plateau is.
-                peak = max(value(s, m) for s in hv if s.exercise == ex and value(s, m) is not None)
-                note = (note + " - " if note else "- ") + f"stuck at {fmt(peak, m)} for {held} sessions"
+            if triple and not note and (stuck := stall_note(hv, ex)):
+                note = "- " + stuck
             ago = (on - before[x.primary]).days if x.primary in before else 99
             if ago < FRESH_DAYS and not mark:
                 mark, note = "⚠️", f"{x.primary} has had only {ago}d rest"

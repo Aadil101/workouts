@@ -201,6 +201,11 @@ class Stall(unittest.TestCase):
         """Backing off for a day is not progress; the plateau is still there."""
         self.assertEqual(plan.stalled(self.days(45, 45, 40, 45), "a"), 3)
 
+    def test_the_note_names_the_peak_not_a_deload(self):
+        """A lighter last session is where he is, not where he is stuck."""
+        self.assertEqual(plan.stall_note(self.days(60, 65, 65, 65, 65, 50), "a"),
+                         "stuck at 65 for 4 sessions")
+
 
 class Modes(unittest.TestCase):
     """Not everything progresses by weight. Reading the mode off the export is
