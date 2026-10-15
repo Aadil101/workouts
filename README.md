@@ -78,7 +78,7 @@ Two environment variables, both optional:
 
 | | |
 |---|---|
-| `WORKOUTS_DATA` | directory holding `history.csv` and `plans/`. Defaults to `../workouts-data`. |
+| `WORKOUTS_DATA` | directory holding `history.csv` and `plan.txt`. Defaults to `../workouts-data`. |
 | `WORKOUTS_SYNC` | a folder synced to your phone (iCloud, Dropbox, Syncthing). `ingest.py` scans it for exports; `plan.py` drops a copy of the plan there. Unset means neither happens. |
 
 **Data lives outside this repo on purpose.** Session timestamps are a log of when you

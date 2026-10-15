@@ -6,9 +6,6 @@ import workouts as w
 
 FRESH_DAYS = 2          # under this many days since a primary hit -> flag it
 GAP = 2                 # assumed days between sessions, for forward simulation
-# Optional: a synced folder (iCloud, Dropbox, Syncthing) to drop a copy of the plan
-# into, for reading on a phone. Unset means the plan lands only in the data repo.
-SYNC = os.environ.get("WORKOUTS_SYNC")
 
 # Stable structure, rotating fill. Counts are slots, not exercises.
 SHAPE = {"push": [("push", 4), ("legs", 1), ("core", 1)],
@@ -42,7 +39,16 @@ def mode(hist, ex):
     return "reps"
 
 
-def typical_sets(hist, ex, default=3):
+def by_day(hist, ex):
+    """date -> this exercise's sets that day."""
+    days = defaultdict(list)
+    for s in hist:
+        if s.exercise == ex:
+            days[s.date.date()].append(s)
+    return days
+
+
+def typical_sets(hist, ex):
     """How many sets of this he did last time.
 
     The gym runs on three sets, but home does not - a wall sit is one, a side
@@ -53,11 +59,9 @@ def typical_sets(hist, ex, default=3):
     as an exercise gets easier - push ups went one, two, three - so the commonest
     value is a record of how he started rather than where he is.
     """
-    per_day = defaultdict(int)
-    for s in hist:
-        if s.exercise == ex and value(s, mode(hist, ex)):
-            per_day[s.date.date()] += 1
-    return per_day[max(per_day)] if per_day else default
+    m = mode(hist, ex)
+    per_day = {d: n for d, ss in by_day(hist, ex).items() if (n := sum(1 for s in ss if value(s, m)))}
+    return per_day[max(per_day)] if per_day else 3
 
 
 def value(s, m):
@@ -110,10 +114,7 @@ def last_triple(hist, ex):
     attempt at the next rung, not a rung. They pad back to three so a repeat has
     something to repeat.
     """
-    days = defaultdict(list)
-    for s in hist:
-        if s.exercise == ex:
-            days[s.date.date()].append(s)
+    days = by_day(hist, ex)
     if not days:
         return None, False, None, set()
     d = max(days)
@@ -156,11 +157,9 @@ def stalled(hist, ex):
     acted on: his own history has 11- and 12-session stalls that he broke by
     grinding, and a deload rule would have thrown that progress away.
     """
-    days = defaultdict(list)
-    for s in hist:
-        if s.exercise == ex and value(s, mode(hist, ex)) is not None:
-            days[s.date.date()].append(value(s, mode(hist, ex)))
-    tops = [max(days[d]) for d in sorted(days)]
+    m = mode(hist, ex)
+    days = by_day(hist, ex)
+    tops = [max(vs) for d in sorted(days) if (vs := [v for s in days[d] if (v := value(s, m)) is not None])]
     if not tops:
         return 0
     # Measured from the last all-time high, not the last increase: coming back up
@@ -229,11 +228,11 @@ def compound_first(chosen, table):
     return sorted(chosen, key=lambda e: -(1 + len(table[e].secondary)))
 
 
-def overlap(a, b, table, half=0.5):
+def overlap(a, b, table):
     """How much two exercises load the same muscles. Secondaries count half."""
     def load(e):
         x = table[e]
-        return {**{m: half for m in x.secondary}, x.primary: 1.0}
+        return {**{m: 0.5 for m in x.secondary}, x.primary: 1.0}
     la, lb = load(a), load(b)
     return sum(v * lb.get(m, 0) for m, v in la.items())
 
@@ -343,8 +342,7 @@ def main(today=None):
     # Files app shows a .md as its source - so the asterisks and hashes were
     # noise in the one place this is actually read. Hierarchy comes from case
     # and indentation instead, which survive any viewer.
-    out = [f"WEEK OF {today:%b %#d}".upper() if os.name == "nt"
-           else f"WEEK OF {today:%b %-d}".upper(), "",
+    out = [f"WEEK OF {today:%b} {today.day}".upper(), "",
            f"Coming off {prev}, so the cycle opens with {nxt}.",
            "Sessions are ordered, not dated.", ""]
 
@@ -384,17 +382,10 @@ def main(today=None):
             out += [f"  {ex}", f"      {detail}", ""]
 
     text = "\n".join(out)
-    plans = os.path.join(w.DATA, "plans")
-    os.makedirs(plans, exist_ok=True)
-    written = [os.path.join(plans, f"{today}.txt"), os.path.join(w.DATA, "plan.txt")]
-    if SYNC:
-        written.append(os.path.normpath(os.path.join(SYNC, "plan.txt")))
-    for path in written:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(text)
-        except OSError as e:
-            print(f"! could not write {path}: {e}", file=sys.stderr)
+    written = [os.path.join(w.DATA, "plan.txt")]
+    if w.SYNC:
+        written.append(os.path.normpath(os.path.join(w.SYNC, "plan.txt")))
+    w.write(written, text)
     # The files are always utf-8; only the console might not be (Windows
     # defaults to cp1252, which cannot encode the section anchors).
     try:

@@ -2,6 +2,7 @@
 import sys, datetime as dt
 from collections import defaultdict
 import workouts as w
+from plan import last_triple
 
 
 def main(today=None):
@@ -34,7 +35,7 @@ def main(today=None):
         last = max(s.date.date() for s in ss)
         lastsets = [s for s in ss if s.date.date() == last]
         top = max((s.weight for s in lastsets if s.weight is not None), default=None)
-        clean = all(s.reps == 8 for s in lastsets if s.reps is not None) and len(lastsets) >= 3
+        clean = last_triple(hist, ex)[1]
         print(f"{ex:<36} {table[ex].category:<5} {str(last):>10} {(today-last).days:>4} "
               f"{(f'{top:.0f}' if top else '-'):>6}  {'yes' if clean else 'no'}")
 

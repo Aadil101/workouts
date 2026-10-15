@@ -8,15 +8,12 @@ same export is harmless because merging it again changes nothing.
 The raw export is also kept as latest-export.csv, overwritten each time, so
 git history holds every dump while the disk holds one.
 """
-import csv, os, shutil, sys, datetime as dt
+import csv, os, shutil, sys
 import workouts as w
+from workouts import when
 
 HEADER = {"start_time", "exercise_title", "set_index"}
 LATEST = os.path.join(w.DATA, "latest-export.csv")
-
-
-def when(row):
-    return dt.datetime.strptime(row["start_time"], "%d %b %Y, %H:%M")
 
 
 def key(row):

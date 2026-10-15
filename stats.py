@@ -78,8 +78,9 @@ def day(d, today=None):
     return f"{d:%b} {d.day}" + (f", {d.year}" if d.year != today.year else "")
 
 
-def chart(pts, unit, wd=600, ht=150, pad=24):
+def chart(pts, unit):
     """Inline SVG line chart, x scaled by date so gaps between sessions show."""
+    wd, ht, pad = 600, 150, 24
     xs = [d.timestamp() for d, _ in pts]
     ys = [v for _, v in pts]
     x0, x1 = xs[0], max(xs[-1], xs[0] + 1)
@@ -146,12 +147,7 @@ def main():
     written = [os.path.join(w.DATA, "stats.html")]
     if w.SYNC:
         written.append(os.path.normpath(os.path.join(w.SYNC, "stats.html")))
-    for path in written:
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(page)
-        except OSError as e:
-            print(f"! could not write {path}: {e}", file=sys.stderr)
+    w.write(written, page)
     print(f"{len(stats)} exercises written to " + ", ".join(written))
 
 

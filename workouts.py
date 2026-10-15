@@ -1,5 +1,5 @@
 """Shared loading for Hevy exports and the exercise table."""
-import csv, os, datetime as dt
+import csv, os, sys, datetime as dt
 from collections import namedtuple
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -9,6 +9,20 @@ DATA = os.path.normpath(os.environ.get("WORKOUTS_DATA") or os.path.join(ROOT, os
 HISTORY = os.path.join(DATA, "history.csv")
 Set = namedtuple("Set", "date venue exercise set_index weight reps duration")
 Ex = namedtuple("Ex", "category venue primary secondary active")
+
+
+def when(row):
+    return dt.datetime.strptime(row["start_time"], "%d %b %Y, %H:%M")
+
+
+def write(paths, text):
+    """Write text to every path; one unwritable path does not stop the rest."""
+    for path in paths:
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(text)
+        except OSError as e:
+            print(f"! could not write {path}: {e}", file=sys.stderr)
 
 
 def load_limits(path=None):
@@ -52,7 +66,7 @@ def load_history(path=None):
     with open(p, newline="", encoding="utf-8-sig") as f:
         for r in csv.DictReader(f):
             sets.append(Set(
-                dt.datetime.strptime(r["start_time"], "%d %b %Y, %H:%M"),
+                when(r),
                 r["title"],
                 r["exercise_title"],
                 int(r["set_index"]),
@@ -74,7 +88,7 @@ def sessions(sets):
     return [(d, v, ss) for (d, v), ss in sorted(out.items())]
 
 
-def muscle_load(sets, table, half=0.5):
+def muscle_load(sets, table):
     """muscle -> list of (date, weight) touches. Secondaries count half."""
     load = {}
     for s in sets:
@@ -83,5 +97,5 @@ def muscle_load(sets, table, half=0.5):
             continue
         load.setdefault(ex.primary, []).append((s.date.date(), 1.0))
         for m in ex.secondary:
-            load.setdefault(m, []).append((s.date.date(), half))
+            load.setdefault(m, []).append((s.date.date(), 0.5))
     return load
